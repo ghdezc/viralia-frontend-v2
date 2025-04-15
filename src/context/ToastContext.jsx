@@ -2,8 +2,10 @@
 import { createContext, useContext, useState, useCallback } from 'react';
 import Toast from '../components/ui/Toast';
 
-const ToastContext = createContext();
+// Crear el contexto
+export const ToastContext = createContext();
 
+// Hook personalizado para usar el contexto
 export function useToast() {
   const context = useContext(ToastContext);
   if (!context) {
@@ -12,6 +14,7 @@ export function useToast() {
   return context;
 }
 
+// Proveedor del contexto
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([]);
 

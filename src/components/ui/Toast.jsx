@@ -1,18 +1,19 @@
 // src/components/ui/Toast.jsx
 import { useEffect, useState } from 'react';
-import { CheckCircleIcon, XCircleIcon, ExclamationCircleIcon, InformationCircleIcon, XMarkIcon } from '@heroicons/react/24/solid';
+import PropTypes from 'prop-types';
+import { 
+  CheckCircleIcon, 
+  XCircleIcon, 
+  ExclamationCircleIcon, 
+  InformationCircleIcon, 
+  XMarkIcon 
+} from '@heroicons/react/24/outline';
 
 /**
  * Componente Toast para mostrar notificaciones
- * @param {Object} props Propiedades del componente
- * @param {string} props.id ID único del toast
- * @param {string} props.message Mensaje a mostrar
- * @param {string} props.type Tipo de toast (success, error, warning, info)
- * @param {Function} props.onClose Función para cerrar el toast
- * @returns {JSX.Element} Componente Toast
  */
-export default function Toast({ id, message, type = 'info', onClose }) {
-  const [isVisible, setIsVisible] = useState(true);
+const Toast = ({ id, message, type = 'info', onClose }) => {
+  const [isVisible, setIsVisible] = useState(false);
   
   // Configuración según el tipo
   const config = {
@@ -48,6 +49,16 @@ export default function Toast({ id, message, type = 'info', onClose }) {
   
   const { icon: Icon, bgColor, textColor, borderColor, iconColor } = config[type] || config.info;
   
+  // Efecto de animación al montar
+  useEffect(() => {
+    // Mostrar el toast con un pequeño retraso para la animación
+    const timer = setTimeout(() => {
+      setIsVisible(true);
+    }, 50);
+    
+    return () => clearTimeout(timer);
+  }, []);
+  
   // Manejar cierre del toast
   const handleClose = () => {
     setIsVisible(false);
@@ -57,15 +68,6 @@ export default function Toast({ id, message, type = 'info', onClose }) {
       if (onClose) onClose();
     }, 300);
   };
-  
-  // Efecto de animación al montar
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setIsVisible(true);
-    }, 50);
-    
-    return () => clearTimeout(timer);
-  }, []);
   
   return (
     <div
@@ -96,4 +98,13 @@ export default function Toast({ id, message, type = 'info', onClose }) {
       </div>
     </div>
   );
-}
+};
+
+Toast.propTypes = {
+  id: PropTypes.string.isRequired,
+  message: PropTypes.string.isRequired,
+  type: PropTypes.oneOf(['success', 'error', 'warning', 'info']),
+  onClose: PropTypes.func
+};
+
+export default Toast;

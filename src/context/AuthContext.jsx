@@ -1,21 +1,11 @@
 // src/context/AuthContext.jsx
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useState, useEffect } from 'react';
 import { cognitoAuthService } from '../services/auth/cognito';
 import { useToast } from './ToastContext';
 
-// Crear el contexto
-const AuthContext = createContext();
+// Crear el contexto de autenticación
+export const AuthContext = createContext();
 
-// Hook personalizado para usar el contexto
-export function useAuth() {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth debe usarse dentro de un AuthProvider');
-  }
-  return context;
-}
-
-// Proveedor del contexto
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);

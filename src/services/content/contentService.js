@@ -1,11 +1,37 @@
 // src/services/content/contentService.js
 import axios from 'axios';
+import { sanitizeOutputData } from '../../utils/security';
 
-// URL base de la API (usar variables de entorno en producción)
+// URL base de la API
 const API_URL = import.meta.env.VITE_API_ENDPOINT || 'https://api.viralia.ai/v1';
 
+// Interceptor para sanitizar las respuestas (seguridad)
+axios.interceptors.response.use(
+  (response) => {
+    // Sanitizar los datos de la respuesta
+    if (response.data) {
+      response.data = sanitizeOutputData(response.data);
+    }
+    return response;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+// Instancia axios configurada
+const apiClient = axios.create({
+  baseURL: `${API_URL}/content`,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
 /**
- * Servicio para generación de contenido
+ * Servicio para generación de contenido mejorado
+ * - Mejor manejo de errores
+ * - Sanitización de datos
+ * - Soporte para cancelación de peticiones
  */
 export const contentService = {
   /**
@@ -15,9 +41,10 @@ export const contentService = {
    * @param {string} params.prompt Tema o descripción del contenido
    * @param {string} params.contentType Tipo de contenido (post, tweet, etc)
    * @param {Object} params.options Opciones adicionales
+   * @param {AbortSignal} [signal] Señal para cancelar la petición
    * @returns {Promise<Object>} Contenido generado
    */
-  generateContent: async ({ platform, prompt, contentType = 'post', options = {} }) => {
+  generateContent: async ({ platform, prompt, contentType = 'post', options = {} }, signal) => {
     try {
       // En desarrollo, simular la respuesta para no depender de la API
       if (process.env.NODE_ENV === 'development' || !API_URL.includes('api.viralia')) {
@@ -27,28 +54,40 @@ export const contentService = {
       // En producción, realizar la llamada real a la API
       const token = localStorage.getItem('authToken');
       
-      const { data } = await axios.post(`${API_URL}/content/generate`, {
+      const { data } = await apiClient.post('/generate', {
         platform,
         prompt,
         type: contentType,
         ...options
       }, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {}
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        signal // Permite cancelar la petición
       });
       
       return data;
     } catch (error) {
+      // Mejorar manejo de errores
+      if (axios.isCancel(error)) {
+        console.log('Solicitud cancelada:', error.message);
+        throw new Error('Generación cancelada');
+      }
+      
+      const errorMessage = error.response?.data?.message || 
+                         error.message || 
+                         'Error al generar contenido';
+                         
       console.error('Error generando contenido:', error);
-      throw new Error(error.response?.data?.message || 'Error al generar contenido');
+      throw new Error(errorMessage);
     }
   },
 
   /**
    * Analiza el rendimiento del contenido generado
    * @param {string} contentId ID del contenido generado
+   * @param {AbortSignal} [signal] Señal para cancelar la petición
    * @returns {Promise<Object>} Análisis del contenido
    */
-  analyzeContent: async (contentId) => {
+  analyzeContent: async (contentId, signal) => {
     try {
       if (process.env.NODE_ENV === 'development' || !API_URL.includes('api.viralia')) {
         return await mockAnalyzeContent(contentId);
@@ -56,14 +95,57 @@ export const contentService = {
       
       const token = localStorage.getItem('authToken');
       
-      const { data } = await axios.get(`${API_URL}/content/${contentId}/analyze`, {
+      const { data } = await apiClient.get(`/${contentId}/analyze`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        signal
+      });
+      
+      return data;
+    } catch (error) {
+      if (axios.isCancel(error)) {
+        console.log('Solicitud cancelada:', error.message);
+        throw new Error('Análisis cancelado');
+      }
+      
+      const errorMessage = error.response?.data?.message || 
+                         error.message || 
+                         'Error al analizar contenido';
+                         
+      console.error('Error analizando contenido:', error);
+      throw new Error(errorMessage);
+    }
+  },
+  
+  /**
+   * Guarda un contenido generado
+   * @param {Object} content Contenido a guardar
+   * @returns {Promise<Object>} Contenido guardado
+   */
+  saveContent: async (content) => {
+    try {
+      if (process.env.NODE_ENV === 'development' || !API_URL.includes('api.viralia')) {
+        // Simular guardado en desarrollo
+        return {
+          ...content,
+          id: `content-${Date.now()}`,
+          savedAt: new Date().toISOString()
+        };
+      }
+      
+      const token = localStorage.getItem('authToken');
+      
+      const { data } = await apiClient.post('/save', content, {
         headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
       
       return data;
     } catch (error) {
-      console.error('Error analizando contenido:', error);
-      throw new Error(error.response?.data?.message || 'Error al analizar contenido');
+      const errorMessage = error.response?.data?.message || 
+                         error.message || 
+                         'Error al guardar contenido';
+                         
+      console.error('Error guardando contenido:', error);
+      throw new Error(errorMessage);
     }
   }
 };

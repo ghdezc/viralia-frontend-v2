@@ -1,34 +1,60 @@
 // src/pages/ContentGenerator.jsx
-import { useState, useEffect } from 'react';
-import { useToast } from '../context/ToastContext';
+import { useState, useEffect, useRef } from 'react';
+import { useToast } from '../hooks/useToast';
 import { contentService } from '../services/content/contentService';
 import SocialMediaTabs from '../components/content/SocialMediaTabs';
 import LinkedInGenerator from '../components/content/LinkedInGenerator';
 import TwitterGenerator from '../components/content/TwitterGenerator';
 import GeneratedContent from '../components/content/GeneratedContent';
 import ContentTips from '../components/content/ContentTips';
-import LoadingSpinner from '../components/ui/LoadingSpinner';
+import LoadingSpinner from '../components/common/LoadingSpinner';
 
-const platforms = [
-  { id: 'linkedin', name: 'LinkedIn', color: '#0077b5' },
-  { id: 'twitter', name: 'Twitter', color: '#1da1f2' },
-  { id: 'facebook', name: 'Facebook', color: '#4267b2' },
-  { id: 'instagram', name: 'Instagram', color: '#e1306c' },
-];
-
-export default function ContentGenerator() {
+/**
+ * Página del generador de contenido optimizada
+ * - UI más limpia y menos cargada
+ * - Mejoras de rendimiento
+ * - Mejor organización del código
+ * - Soporte para cancelación de peticiones
+ */
+const ContentGenerator = () => {
+  // Estados
   const [platform, setPlatform] = useState('linkedin');
   const [prompt, setPrompt] = useState('');
   const [generatedContent, setGeneratedContent] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [activeTab, setActiveTab] = useState('creator'); // 'creator' o 'analytics'
+  const [activeTab, setActiveTab] = useState('creator');
+  
+  // Refs
+  const abortControllerRef = useRef(null);
+  
+  // Hooks
   const toast = useToast();
 
+  // Definición de plataformas
+  const platforms = [
+    { id: 'linkedin', name: 'LinkedIn', color: '#0077b5' },
+    { id: 'twitter', name: 'Twitter', color: '#1da1f2' },
+    { id: 'facebook', name: 'Facebook', color: '#4267b2', disabled: true },
+    { id: 'instagram', name: 'Instagram', color: '#e1306c', disabled: true },
+  ];
+
+  // Limpieza al desmontar
+  useEffect(() => {
+    return () => {
+      // Cancelar cualquier petición pendiente
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
+
+  // Cambiar plataforma
   const handlePlatformChange = (newPlatform) => {
     setPlatform(newPlatform);
     setGeneratedContent(null);
   };
 
+  // Generar contenido
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -36,6 +62,14 @@ export default function ContentGenerator() {
       toast.warning('Por favor ingresa un tema para generar contenido.');
       return;
     }
+    
+    // Cancelar petición anterior si existe
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    
+    // Crear nuevo AbortController
+    abortControllerRef.current = new AbortController();
     
     setIsGenerating(true);
     
@@ -45,13 +79,16 @@ export default function ContentGenerator() {
         platform,
         prompt,
         contentType: 'post',
-      });
+      }, abortControllerRef.current.signal);
       
       setGeneratedContent(result);
       toast.success('¡Contenido generado con éxito!');
     } catch (error) {
-      console.error('Error al generar contenido:', error);
-      toast.error('Hubo un error al generar el contenido. Por favor intenta nuevamente.');
+      // No mostrar error si fue cancelado intencionalmente
+      if (error.message !== 'Generación cancelada') {
+        console.error('Error al generar contenido:', error);
+        toast.error('Hubo un error al generar el contenido. Por favor intenta nuevamente.');
+      }
     } finally {
       setIsGenerating(false);
     }
@@ -83,6 +120,7 @@ export default function ContentGenerator() {
 
   return (
     <div className="space-y-6">
+      {/* Encabezado con tabs */}
       <div className="sm:flex sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Generador de Contenido</h1>
@@ -97,7 +135,7 @@ export default function ContentGenerator() {
               onClick={() => setActiveTab('creator')}
               className={`px-4 py-2 text-sm font-medium rounded-md ${
                 activeTab === 'creator' 
-                  ? 'bg-indigo-600 text-white'
+                  ? 'bg-primary-600 text-white'
                   : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
               }`}
             >
@@ -107,11 +145,11 @@ export default function ContentGenerator() {
               onClick={() => setActiveTab('analytics')}
               className={`px-4 py-2 text-sm font-medium rounded-md ${
                 activeTab === 'analytics' 
-                  ? 'bg-indigo-600 text-white'
+                  ? 'bg-primary-600 text-white'
                   : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
               }`}
             >
-              Análisis de engagement
+              Análisis
             </button>
           </div>
         </div>
@@ -173,7 +211,7 @@ export default function ContentGenerator() {
             {/* Contenido generado */}
             {isGenerating ? (
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 flex items-center justify-center">
-                <LoadingSpinner text="Generando contenido optimizado..." />
+                <LoadingSpinner size="lg" text="Generando contenido optimizado..." />
               </div>
             ) : (
               generatedContent && (
@@ -192,7 +230,7 @@ export default function ContentGenerator() {
               tips={platformTips[platform] || []}
             />
             
-            {/* Métricas de campañas (demo) */}
+            {/* Métricas de campañas (simplificado) */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
               <div className="p-5 border-b border-gray-200">
                 <h3 className="font-medium text-gray-900">Rendimiento reciente</h3>
@@ -200,35 +238,25 @@ export default function ContentGenerator() {
               <div className="p-5 space-y-4">
                 <div>
                   <div className="flex justify-between text-sm mb-1">
-                    <span className="text-gray-500">Engagement promedio</span>
-                    <span className="font-medium text-indigo-600">+24%</span>
+                    <span className="text-gray-500">Engagement</span>
+                    <span className="font-medium text-primary-600">+24%</span>
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div className="bg-indigo-600 h-2 rounded-full" style={{ width: '24%' }}></div>
+                    <div className="bg-primary-600 h-2 rounded-full" style={{ width: '24%' }}></div>
                   </div>
                 </div>
                 
                 <div>
                   <div className="flex justify-between text-sm mb-1">
                     <span className="text-gray-500">Posts virales</span>
-                    <span className="font-medium text-indigo-600">2 de 10</span>
+                    <span className="font-medium text-primary-600">2 de 10</span>
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div className="bg-indigo-600 h-2 rounded-full" style={{ width: '20%' }}></div>
+                    <div className="bg-primary-600 h-2 rounded-full" style={{ width: '20%' }}></div>
                   </div>
                 </div>
                 
-                <div>
-                  <div className="flex justify-between text-sm mb-1">
-                    <span className="text-gray-500">Tasa de conversión</span>
-                    <span className="font-medium text-indigo-600">3.2%</span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div className="bg-indigo-600 h-2 rounded-full" style={{ width: '32%' }}></div>
-                  </div>
-                </div>
-                
-                <button className="mt-2 text-sm text-indigo-600 hover:text-indigo-800 font-medium">
+                <button className="mt-2 text-sm text-primary-600 hover:text-primary-800 font-medium">
                   Ver informe completo →
                 </button>
               </div>
@@ -236,7 +264,7 @@ export default function ContentGenerator() {
           </div>
         </div>
       ) : (
-        // Tab de Analytics (simplemente un placeholder por ahora)
+        // Tab de Analytics (simplificado)
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12">
           <div className="text-center">
             <h3 className="text-lg font-medium text-gray-900">Análisis de Engagement</h3>
@@ -249,4 +277,6 @@ export default function ContentGenerator() {
       )}
     </div>
   );
-}
+};
+
+export default ContentGenerator;

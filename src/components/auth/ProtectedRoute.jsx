@@ -1,29 +1,48 @@
 // src/components/auth/ProtectedRoute.jsx
 import { Navigate, useLocation } from 'react-router-dom';
+import PropTypes from 'prop-types';
 import { useAuth } from '../../hooks/useAuth';
-import LoadingScreen from '../ui/LoadingScreen';
+import LoadingScreen from '../common/LoadingScreen';
+import { useEffect } from 'react';
 
 /**
- * Componente para proteger rutas que requieren autenticación
- * @param {Object} props - Propiedades del componente
- * @param {React.ReactNode} props.children - Elementos hijos (componentes protegidos)
- * @param {string} [props.redirectTo='/login'] - Ruta de redirección si no hay autenticación
- * @param {boolean} [props.allowRoles=false] - Indica si se debe validar roles
- * @param {Array} [props.roles=[]] - Roles permitidos para acceder a la ruta
- * @returns {JSX.Element} Componente renderizado
+ * Componente mejorado para proteger rutas que requieren autenticación
+ * - Validación de roles
+ * - Mejor manejo de redirecciones
+ * - Soporte para rutas anidadas
+ * - Registro de actividad para seguridad
  */
 export default function ProtectedRoute({ 
   children, 
   redirectTo = '/login', 
-  allowRoles = false,
-  roles = [] 
+  roles = [],
+  requiredPlan = null
 }) {
-  const { user, loading, isAuthenticated } = useAuth();
+  const { user, loading, isAuthenticated, refreshSession } = useAuth();
   const location = useLocation();
+
+  // Actualizar timestamp de última actividad para sesiones
+  useEffect(() => {
+    if (isAuthenticated) {
+      sessionStorage.setItem('lastActivity', Date.now().toString());
+      
+      // Refrescar sesión si es necesario (token a punto de expirar)
+      const tokenExpiration = localStorage.getItem('tokenExpiration');
+      if (tokenExpiration) {
+        const expirationTime = parseInt(tokenExpiration, 10);
+        const currentTime = Date.now();
+        
+        // Si el token expira en menos de 5 minutos, refrescarlo
+        if (expirationTime - currentTime < 5 * 60 * 1000) {
+          refreshSession();
+        }
+      }
+    }
+  }, [isAuthenticated, refreshSession, location.pathname]);
 
   // Mostrar pantalla de carga mientras se verifica la autenticación
   if (loading) {
-    return <LoadingScreen />;
+    return <LoadingScreen message="Verificando acceso..." />;
   }
 
   // Si no está autenticado, redirigir al login
@@ -33,17 +52,33 @@ export default function ProtectedRoute({
   }
 
   // Si se requiere validación de roles
-  if (allowRoles && roles.length > 0) {
-    // Verificar si el usuario tiene alguno de los roles requeridos
-    const userRole = user?.role || 'user';
+  if (roles.length > 0) {
+    const userRole = user?.role || user?.['custom:role'] || 'user';
     const hasRequiredRole = roles.includes(userRole);
 
     if (!hasRequiredRole) {
       // Si no tiene el rol requerido, redirigir a una página de acceso denegado
-      return <Navigate to="/access-denied" replace />;
+      return <Navigate to="/access-denied" replace state={{ requiredRoles: roles }} />;
+    }
+  }
+
+  // Si se requiere un plan específico
+  if (requiredPlan) {
+    const userPlan = user?.plan || user?.['custom:plan'] || 'free';
+    
+    if (userPlan !== requiredPlan) {
+      // Si no tiene el plan requerido, redirigir a una página de actualización
+      return <Navigate to="/upgrade-plan" replace state={{ requiredPlan, currentPlan: userPlan }} />;
     }
   }
 
   // Si pasa todas las validaciones, renderizar los componentes hijos
   return children;
 }
+
+ProtectedRoute.propTypes = {
+  children: PropTypes.node.isRequired,
+  redirectTo: PropTypes.string,
+  roles: PropTypes.arrayOf(PropTypes.string),
+  requiredPlan: PropTypes.string
+};
