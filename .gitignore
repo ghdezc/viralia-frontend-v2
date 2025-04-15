@@ -1,0 +1,25 @@
+# dependencias
+node_modules/
+.pnpm/
+
+# compilación
+dist/
+.vite/
+*.log
+
+# configuración sensible
+.env
+.env.*
+
+# editores
+.vscode/
+.idea/
+.DS_Store
+
+# pnpm
+pnpm-debug.log*
+.pnpm-debug.log*
+
+# test
+coverage/
+node_modules/
