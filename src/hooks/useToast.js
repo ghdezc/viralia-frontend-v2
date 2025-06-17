@@ -1,17 +1,11 @@
-// src/hooks/useToast.js
-import { useContext } from 'react';
-import { ToastContext } from '../context/ToastContext';
+// src/hooks/useToast.js - Hook simple para notificaciones
+import toast from 'react-hot-toast';
 
-/**
- * Hook para acceder a las funcionalidades de Toast
- * Proporciona métodos para mostrar diferentes tipos de notificaciones
- */
 export const useToast = () => {
-  const context = useContext(ToastContext);
-  
-  if (!context) {
-    throw new Error('useToast debe usarse dentro de un ToastProvider');
-  }
-  
-  return context;
+  return {
+    success: (message) => toast.success(message),
+    error: (message) => toast.error(message),
+    warning: (message) => toast(message, { icon: '⚠️' }),
+    info: (message) => toast(message, { icon: 'ℹ️' }),
+  };
 };

@@ -1,16 +1,22 @@
-// src/services/api/viraliaApi.js - Cliente API optimizado para EC2
+// src/services/api/viraliaApi.js - Cliente API ACTUALIZADO para tu backend
 import axios from 'axios';
-import { secureAuth } from '../auth/secureAuth';
+import { cognitoDirectAPI } from '../auth/cognitoDirectApi';
 import toast from 'react-hot-toast';
 
 class ViraliaApiClient {
     constructor() {
+        // Usar tu ALB endpoint
         this.baseURL = import.meta.env.VITE_API_ENDPOINT || 'http://viralia-alb-1099907913.us-east-1.elb.amazonaws.com';
         this.apiKey = import.meta.env.VITE_API_KEY || '0vgNwCVv5QgwPKZiexez5VpUmmRslilEZeYPeMhXvuaFYa2nqTkTmOHTDDK7nKJ4h7oNEt';
 
+        console.log('🚀 Viralia API Client Config:', {
+            baseURL: this.baseURL,
+            apiKey: this.apiKey ? this.apiKey.substring(0, 20) + '...' : 'NOT_SET'
+        });
+
         this.client = axios.create({
             baseURL: this.baseURL,
-            timeout: 120000, // 2 minutos para generación de contenido
+            timeout: 120000, // 2 minutos para generación de IA
             headers: {
                 'Content-Type': 'application/json',
                 'X-API-Key': this.apiKey
@@ -25,51 +31,29 @@ class ViraliaApiClient {
         this.client.interceptors.request.use(
             async (config) => {
                 try {
-                    const authHeaders = secureAuth.getAuthHeaders();
+                    const authHeaders = cognitoDirectAPI.getAuthHeaders();
                     config.headers = { ...config.headers, ...authHeaders };
 
-                    // Log para debugging en desarrollo
-                    if (import.meta.env.DEV) {
-                        console.log(`🚀 API Request: ${config.method?.toUpperCase()} ${config.url}`);
-                    }
+                    console.log(`🚀 API Request: ${config.method?.toUpperCase()} ${config.url}`);
+                    console.log('🔑 Auth Headers:', Object.keys(authHeaders));
 
                     return config;
                 } catch (error) {
-                    console.error('Error adding auth headers:', error);
+                    console.error('❌ Error adding auth headers:', error);
                     return config;
                 }
             },
             (error) => Promise.reject(error)
         );
 
-        // Response interceptor - manejo de errores
+        // Response interceptor
         this.client.interceptors.response.use(
             (response) => {
-                if (import.meta.env.DEV) {
-                    console.log(`✅ API Response: ${response.status} ${response.config.url}`);
-                }
+                console.log(`✅ API Response: ${response.status} ${response.config.url}`);
                 return response;
             },
             async (error) => {
-                const originalRequest = error.config;
-
-                // Manejo de errores 401 - token expirado
-                if (error.response?.status === 401 && !originalRequest._retry) {
-                    originalRequest._retry = true;
-
-                    try {
-                        await secureAuth.refreshSession();
-                        const authHeaders = secureAuth.getAuthHeaders();
-                        originalRequest.headers = { ...originalRequest.headers, ...authHeaders };
-                        return this.client(originalRequest);
-                    } catch (refreshError) {
-                        secureAuth.signOut();
-                        window.location.href = '/login';
-                        return Promise.reject(refreshError);
-                    }
-                }
-
-                // Manejo de otros errores
+                console.error('❌ API Error:', error.response?.status, error.response?.data);
                 this.handleApiError(error);
                 return Promise.reject(error);
             }
@@ -78,28 +62,31 @@ class ViraliaApiClient {
 
     handleApiError(error) {
         const status = error.response?.status;
-        const message = error.response?.data?.message || error.message;
+        const message = error.response?.data?.user_message || error.response?.data?.message || error.message;
 
         switch (status) {
+            case 401:
+                toast.error('Sesión expirada. Por favor inicia sesión nuevamente.');
+                // Redirigir al login si es necesario
+                break;
             case 429:
                 toast.error('Demasiadas solicitudes. Intenta en unos momentos.');
                 break;
             case 500:
-                toast.error('Error interno del servidor. Nuestro equipo ha sido notificado.');
-                break;
-            case 503:
-                toast.error('Servicio temporalmente no disponible.');
+                toast.error('Error interno del servidor.');
                 break;
             default:
-                if (import.meta.env.DEV) {
-                    console.error('API Error:', error);
+                if (message) {
+                    toast.error(message);
                 }
         }
     }
 
-    // Generación de contenido principal
+    // 🎯 MÉTODO PRINCIPAL: Generar contenido (conecta con /generate_post)
     async generateContent({ tema, tono, plataformas, es_url = false, user_id = 'user' }) {
         try {
+            console.log('🎯 Generando contenido:', { tema, tono, plataformas, es_url });
+
             const response = await this.client.post('/generate_post', {
                 tema,
                 tono,
@@ -108,13 +95,17 @@ class ViraliaApiClient {
                 user_id
             });
 
+            console.log('✅ Respuesta del servidor:', response.data);
+
+            // Procesar la respuesta del backend
             return this.processContentResponse(response.data);
         } catch (error) {
+            console.error('❌ Error generando contenido:', error);
             throw new Error(error.response?.data?.user_message || 'Error generando contenido');
         }
     }
 
-    // Variaciones A/B
+    // 🔄 Generar variaciones A/B
     async generateABVariations({ base_post, red, user_id = 'user' }) {
         try {
             const response = await this.client.post('/ab_variations', {
@@ -129,22 +120,21 @@ class ViraliaApiClient {
         }
     }
 
-    // Contenido por categoría
-    async generateByCategory({ tema, red, user_id = 'user' }) {
+    // 📊 Análisis de sentimiento
+    async analyzeSentiment({ text, user_id = 'user' }) {
         try {
-            const response = await this.client.post('/by_category', {
-                tema,
-                red,
+            const response = await this.client.post('/analyze_sentiment', {
+                text,
                 user_id
             });
 
             return response.data;
         } catch (error) {
-            throw new Error('Error generando contenido por categoría');
+            throw new Error('Error analizando sentimiento');
         }
     }
 
-    // Sugerir hashtags
+    // 🏷️ Sugerir hashtags
     async suggestHashtags({ text, red, user_id = 'user' }) {
         try {
             const response = await this.client.post('/suggest_hashtags', {
@@ -159,21 +149,7 @@ class ViraliaApiClient {
         }
     }
 
-    // Análisis de sentimiento
-    async analyzeSentiment({ text, user_id = 'user' }) {
-        try {
-            const response = await this.client.post('/analyze_sentiment', {
-                text,
-                user_id
-            });
-
-            return response.data;
-        } catch (error) {
-            throw new Error('Error analizando sentimiento');
-        }
-    }
-
-    // Verificar directrices
+    // 🔍 Verificar directrices
     async checkGuidelines({ text, red, user_id = 'user' }) {
         try {
             const response = await this.client.post('/guideline_checker', {
@@ -188,7 +164,7 @@ class ViraliaApiClient {
         }
     }
 
-    // Reciclar contenido evergreen
+    // ♻️ Reciclar contenido
     async recycleContent({ old_post, red, user_id = 'user' }) {
         try {
             const response = await this.client.post('/recycle_evergreen', {
@@ -203,7 +179,7 @@ class ViraliaApiClient {
         }
     }
 
-    // Optimizar horario
+    // ⏰ Optimizar horario
     async optimizeSchedule({ tema, red, user_id = 'user' }) {
         try {
             const response = await this.client.post('/optimize_schedule', {
@@ -218,7 +194,7 @@ class ViraliaApiClient {
         }
     }
 
-    // Insights de rendimiento
+    // 📈 Insights de rendimiento
     async getPerformanceInsights({ metrics_json, red, user_id = 'user' }) {
         try {
             const response = await this.client.post('/performance_insights', {
@@ -233,39 +209,75 @@ class ViraliaApiClient {
         }
     }
 
-    // Procesar respuesta de contenido
+    // 🔧 Procesar respuesta de contenido del backend
     processContentResponse(data) {
+        console.log('🔧 Procesando respuesta:', data);
+
         if (!data.ok) {
             throw new Error(data.user_message || 'Error procesando contenido');
         }
 
-        // Transformar respuesta del backend a formato del frontend
+        // La respuesta viene en data.result con el formato de tu agent.py
         const processedResult = {};
 
         Object.entries(data.result).forEach(([platform, content]) => {
             processedResult[platform] = {
-                title: content.post?.split('\n')[0] || '',
+                title: this.extractTitle(content.post),
                 content: content.post || '',
                 hashtags: Array.isArray(content.hashtags) ? content.hashtags : [],
                 emojis: content.emojis || '',
                 sentiment: content.sentiment || 'neutral',
                 metrics: {
-                    potencialViral: Math.floor(Math.random() * 20) + 80, // Simulated for demo
-                    engagementScore: Math.floor(Math.random() * 15) + 85,
-                    alcanceEstimado: `${Math.floor(Math.random() * 15) + 10}K-${Math.floor(Math.random() * 20) + 25}K`
+                    potencialViral: this.generateMetric(80, 95),
+                    engagementScore: this.generateMetric(75, 90),
+                    alcanceEstimado: this.generateReachEstimate()
                 },
                 checklist: content.checklist || {},
                 politicas_relevantes: content.politicas_relevantes || [],
                 url: content.url || null,
                 warning: content.warning || null,
-                success: content.success !== false
+                success: content.success !== false,
+                // Añadir información de diferenciadores
+                diferenciadores: data.diferenciadores || []
             };
         });
 
-        return processedResult;
+        return {
+            success: true,
+            result: processedResult,
+            diferenciadores: data.diferenciadores || []
+        };
     }
 
-    // Health check
+    // 🎯 Extraer título del post
+    extractTitle(post) {
+        if (!post) return '';
+
+        // Buscar la primera línea que parezca un título
+        const lines = post.split('\n').filter(line => line.trim());
+        if (lines.length > 0) {
+            const firstLine = lines[0].trim();
+            // Si es muy corta o larga, usar como está
+            if (firstLine.length > 80) {
+                return firstLine.substring(0, 77) + '...';
+            }
+            return firstLine;
+        }
+        return '';
+    }
+
+    // 📊 Generar métricas simuladas
+    generateMetric(min, max) {
+        return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+
+    generateReachEstimate() {
+        const min = Math.floor(Math.random() * 15) + 5;  // 5-20K
+        const max = min + Math.floor(Math.random() * 15) + 10; // +10-25K
+        return `${min}K-${max}K`;
+    }
+
+    // 🏥 Health check
     async healthCheck() {
         try {
             const response = await this.client.get('/healthz');
@@ -279,17 +291,17 @@ class ViraliaApiClient {
 // Instancia singleton
 export const viraliaApi = new ViraliaApiClient();
 
-// Hooks para React Query (opcional)
+// Hook para React (opcional)
 export const useViraliaApi = () => {
     return {
         generateContent: viraliaApi.generateContent.bind(viraliaApi),
         generateABVariations: viraliaApi.generateABVariations.bind(viraliaApi),
-        generateByCategory: viraliaApi.generateByCategory.bind(viraliaApi),
-        suggestHashtags: viraliaApi.suggestHashtags.bind(viraliaApi),
         analyzeSentiment: viraliaApi.analyzeSentiment.bind(viraliaApi),
+        suggestHashtags: viraliaApi.suggestHashtags.bind(viraliaApi),
         checkGuidelines: viraliaApi.checkGuidelines.bind(viraliaApi),
         recycleContent: viraliaApi.recycleContent.bind(viraliaApi),
         optimizeSchedule: viraliaApi.optimizeSchedule.bind(viraliaApi),
-        getPerformanceInsights: viraliaApi.getPerformanceInsights.bind(viraliaApi)
+        getPerformanceInsights: viraliaApi.getPerformanceInsights.bind(viraliaApi),
+        healthCheck: viraliaApi.healthCheck.bind(viraliaApi)
     };
 };

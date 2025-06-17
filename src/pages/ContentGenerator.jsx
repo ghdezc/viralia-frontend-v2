@@ -1,281 +1,424 @@
-// src/pages/ContentGenerator.jsx
+// src/pages/ContentGenerator.jsx - GENERADOR COMPLETO
 import { useState, useEffect, useRef } from 'react';
+import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
-import { contentService } from '../services/content/contentService';
-import SocialMediaTabs from '../components/content/SocialMediaTabs';
-import LinkedInGenerator from '../components/content/LinkedInGenerator';
-import TwitterGenerator from '../components/content/TwitterGenerator';
-import GeneratedContent from '../components/content/GeneratedContent';
-import ContentTips from '../components/content/ContentTips';
+import { viraliaApi } from '../services/api/viraliaApi';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 
-/**
- * Página del generador de contenido optimizada
- * - UI más limpia y menos cargada
- * - Mejoras de rendimiento
- * - Mejor organización del código
- * - Soporte para cancelación de peticiones
- */
 const ContentGenerator = () => {
-  // Estados
-  const [platform, setPlatform] = useState('linkedin');
+  // Estados principales
   const [prompt, setPrompt] = useState('');
-  const [generatedContent, setGeneratedContent] = useState(null);
+  const [selectedPlatforms, setSelectedPlatforms] = useState(['LinkedIn']);
+  const [tone, setTone] = useState('profesional');
+  const [isUrl, setIsUrl] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [activeTab, setActiveTab] = useState('creator');
-  
-  // Refs
+  const [generatedContent, setGeneratedContent] = useState(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
+  // Refs y hooks
   const abortControllerRef = useRef(null);
-  
-  // Hooks
+  const { user } = useAuth();
   const toast = useToast();
 
-  // Definición de plataformas
+  // Configuración de plataformas
   const platforms = [
-    { id: 'linkedin', name: 'LinkedIn', color: '#0077b5' },
-    { id: 'twitter', name: 'Twitter', color: '#1da1f2' },
-    { id: 'facebook', name: 'Facebook', color: '#4267b2', disabled: true },
-    { id: 'instagram', name: 'Instagram', color: '#e1306c', disabled: true },
+    { id: 'LinkedIn', name: 'LinkedIn', color: '#0077b5', icon: '💼' },
+    { id: 'Twitter', name: 'Twitter/X', color: '#1da1f2', icon: '🐦' },
+    { id: 'Facebook', name: 'Facebook', color: '#4267b2', icon: '📘' },
+    { id: 'Instagram', name: 'Instagram', color: '#e1306c', icon: '📸' },
+  ];
+
+  // Opciones de tono
+  const toneOptions = [
+    { value: 'profesional', label: 'Profesional' },
+    { value: 'casual', label: 'Casual' },
+    { value: 'inspirador', label: 'Inspirador' },
+    { value: 'educativo', label: 'Educativo' },
+    { value: 'humoristico', label: 'Humorístico' },
+  ];
+
+  // Sugerencias rápidas
+  const quickSuggestions = [
+    'Estrategias de marketing digital 2025',
+    'Inteligencia artificial en empresas',
+    'Tendencias de redes sociales',
+    'Productividad en el trabajo remoto',
+    'Innovación tecnológica',
+    'Liderazgo empresarial',
   ];
 
   // Limpieza al desmontar
   useEffect(() => {
     return () => {
-      // Cancelar cualquier petición pendiente
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
     };
   }, []);
 
-  // Cambiar plataforma
-  const handlePlatformChange = (newPlatform) => {
-    setPlatform(newPlatform);
-    setGeneratedContent(null);
+  // Manejar selección de plataformas
+  const handlePlatformToggle = (platformId) => {
+    setSelectedPlatforms(prev => {
+      if (prev.includes(platformId)) {
+        return prev.filter(id => id !== platformId);
+      } else {
+        return [...prev, platformId];
+      }
+    });
+  };
+
+  // Detectar si es URL
+  const handlePromptChange = (value) => {
+    setPrompt(value);
+    setIsUrl(value.startsWith('http://') || value.startsWith('https://'));
   };
 
   // Generar contenido
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
+  const handleGenerate = async () => {
     if (!prompt.trim()) {
-      toast.warning('Por favor ingresa un tema para generar contenido.');
+      toast.error('Por favor ingresa un tema o URL');
       return;
     }
-    
-    // Cancelar petición anterior si existe
+
+    if (selectedPlatforms.length === 0) {
+      toast.error('Selecciona al menos una plataforma');
+      return;
+    }
+
+    // Cancelar petición anterior
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
-    
-    // Crear nuevo AbortController
-    abortControllerRef.current = new AbortController();
-    
+
     setIsGenerating(true);
-    
+    setGeneratedContent(null);
+
     try {
-      // Llamada al servicio de generación de contenido
-      const result = await contentService.generateContent({
-        platform,
-        prompt,
-        contentType: 'post',
-      }, abortControllerRef.current.signal);
-      
-      setGeneratedContent(result);
-      toast.success('¡Contenido generado con éxito!');
-    } catch (error) {
-      // No mostrar error si fue cancelado intencionalmente
-      if (error.message !== 'Generación cancelada') {
-        console.error('Error al generar contenido:', error);
-        toast.error('Hubo un error al generar el contenido. Por favor intenta nuevamente.');
+      console.log('🎯 Generando contenido:', {
+        tema: prompt,
+        tono: tone,
+        plataformas: selectedPlatforms,
+        es_url: isUrl,
+        user_id: user?.email || 'demo-user'
+      });
+
+      const result = await viraliaApi.generateContent({
+        tema: prompt,
+        tono: tone,
+        plataformas: selectedPlatforms,
+        es_url: isUrl,
+        user_id: user?.email || 'demo-user'
+      });
+
+      console.log('✅ Resultado:', result);
+
+      if (result.success) {
+        setGeneratedContent(result.result);
+        toast.success('¡Contenido generado exitosamente!');
+
+        // Mostrar diferenciadores
+        if (result.diferenciadores?.length > 0) {
+          console.log('🚀 Diferenciadores Viralia:', result.diferenciadores);
+        }
+      } else {
+        throw new Error('Error en la generación');
       }
+    } catch (error) {
+      console.error('❌ Error:', error);
+      toast.error(error.message || 'Error al generar contenido');
     } finally {
       setIsGenerating(false);
     }
   };
 
-  // Tips contextuales según la plataforma
-  const platformTips = {
-    linkedin: [
-      "Los posts con preguntas generan un 50% más de comentarios",
-      "El contenido sobre liderazgo y tendencias de la industria tiene mayor alcance",
-      "Usa entre 1-3 hashtags relevantes para mayor visibilidad"
-    ],
-    twitter: [
-      "Los tweets con imágenes reciben un 150% más de retweets",
-      "La longitud ideal es de 71-100 caracteres para mayor engagement",
-      "Los hilos de 3-5 tweets tienen más probabilidad de volverse virales"
-    ],
-    facebook: [
-      "El contenido con videos tiene un 59% más de engagement",
-      "Las publicaciones cortas (menos de 80 caracteres) generan más interacción",
-      "El mejor momento para publicar es entre las 1PM y 3PM"
-    ],
-    instagram: [
-      "Utiliza de 5 a 9 hashtags para optimizar el alcance",
-      "Las imágenes con tonos azules generan un 24% más de likes",
-      "Las historias con encuestas aumentan la interacción en un 80%"
-    ]
+  // Copiar contenido
+  const copyContent = async (content) => {
+    try {
+      await navigator.clipboard.writeText(content);
+      toast.success('Contenido copiado al portapapeles');
+    } catch (error) {
+      toast.error('Error al copiar');
+    }
   };
 
   return (
-    <div className="space-y-6">
-      {/* Encabezado con tabs */}
-      <div className="sm:flex sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Generador de Contenido</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Crea contenido optimizado para diferentes plataformas
+      <div className="max-w-7xl mx-auto p-6 space-y-6">
+        {/* Header */}
+        <div className="text-center">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            🚀 Generador de Contenido Viral
+          </h1>
+          <p className="text-gray-600">
+            Crea contenido optimizado para múltiples plataformas con IA
           </p>
         </div>
-        
-        <div className="mt-4 sm:mt-0">
-          <div className="flex space-x-3">
-            <button
-              onClick={() => setActiveTab('creator')}
-              className={`px-4 py-2 text-sm font-medium rounded-md ${
-                activeTab === 'creator' 
-                  ? 'bg-primary-600 text-white'
-                  : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-              }`}
-            >
-              Creador
-            </button>
-            <button
-              onClick={() => setActiveTab('analytics')}
-              className={`px-4 py-2 text-sm font-medium rounded-md ${
-                activeTab === 'analytics' 
-                  ? 'bg-primary-600 text-white'
-                  : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-              }`}
-            >
-              Análisis
-            </button>
+
+        <div className="grid lg:grid-cols-3 gap-6">
+          {/* Panel de Configuración */}
+          <div className="lg:col-span-1 space-y-6">
+            {/* Formulario Principal */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <h2 className="text-lg font-semibold mb-4">⚙️ Configuración</h2>
+
+              {/* Input del tema/URL */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  {isUrl ? '🌐 URL del contenido' : '💭 Tema del contenido'}
+                </label>
+                <textarea
+                    value={prompt}
+                    onChange={(e) => handlePromptChange(e.target.value)}
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 resize-none"
+                    rows={3}
+                    placeholder={isUrl ? 'https://ejemplo.com/articulo' : 'Ej: Estrategias de marketing digital para PyMEs'}
+                />
+                {isUrl && (
+                    <p className="text-xs text-blue-600 mt-1">
+                      📄 Detectamos una URL - analizaremos el contenido
+                    </p>
+                )}
+              </div>
+
+              {/* Selección de Plataformas */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  📱 Plataformas ({selectedPlatforms.length})
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {platforms.map((platform) => (
+                      <button
+                          key={platform.id}
+                          onClick={() => handlePlatformToggle(platform.id)}
+                          className={`flex items-center p-3 rounded-lg border-2 transition-all ${
+                              selectedPlatforms.includes(platform.id)
+                                  ? 'border-indigo-500 bg-indigo-50'
+                                  : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                      >
+                        <span className="text-lg mr-2">{platform.icon}</span>
+                        <span className="text-sm font-medium">{platform.name}</span>
+                      </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Selector de Tono */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  🎭 Tono de voz
+                </label>
+                <select
+                    value={tone}
+                    onChange={(e) => setTone(e.target.value)}
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                >
+                  {toneOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Opciones Avanzadas */}
+              <button
+                  onClick={() => setShowAdvanced(!showAdvanced)}
+                  className="text-sm text-indigo-600 hover:text-indigo-800 mb-4"
+              >
+                {showAdvanced ? '🔼' : '🔽'} Opciones avanzadas
+              </button>
+
+              {showAdvanced && (
+                  <div className="bg-gray-50 p-4 rounded-lg mb-4">
+                    <div className="space-y-3">
+                      <label className="flex items-center">
+                        <input type="checkbox" className="mr-2" />
+                        <span className="text-sm">Incluir hashtags trending</span>
+                      </label>
+                      <label className="flex items-center">
+                        <input type="checkbox" className="mr-2" defaultChecked />
+                        <span className="text-sm">Optimizar para viralidad</span>
+                      </label>
+                      <label className="flex items-center">
+                        <input type="checkbox" className="mr-2" defaultChecked />
+                        <span className="text-sm">Incluir call-to-action</span>
+                      </label>
+                    </div>
+                  </div>
+              )}
+
+              {/* Botón Generar */}
+              <button
+                  onClick={handleGenerate}
+                  disabled={isGenerating || !prompt.trim() || selectedPlatforms.length === 0}
+                  className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold py-3 px-4 rounded-lg hover:from-indigo-700 hover:to-purple-700 focus:ring-4 focus:ring-indigo-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+              >
+                {isGenerating ? (
+                    <>
+                      <LoadingSpinner size="sm" color="white" className="mr-2" />
+                      Generando contenido...
+                    </>
+                ) : (
+                    <>
+                      ⚡ Generar Contenido
+                    </>
+                )}
+              </button>
+            </div>
+
+            {/* Sugerencias Rápidas */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <h3 className="text-lg font-semibold mb-4">💡 Sugerencias</h3>
+              <div className="space-y-2">
+                {quickSuggestions.map((suggestion, index) => (
+                    <button
+                        key={index}
+                        onClick={() => handlePromptChange(suggestion)}
+                        className="w-full text-left p-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
+                    >
+                      {suggestion}
+                    </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Panel de Resultados */}
+          <div className="lg:col-span-2">
+            {isGenerating && (
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
+                  <LoadingSpinner size="lg" />
+                  <p className="mt-4 text-gray-600">
+                    Generando contenido optimizado con IA...
+                  </p>
+                  <p className="text-sm text-gray-500 mt-2">
+                    Esto puede tomar hasta 30 segundos
+                  </p>
+                </div>
+            )}
+
+            {!isGenerating && !generatedContent && (
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
+                  <div className="text-6xl mb-4">🎯</div>
+                  <h3 className="text-xl font-semibold text-gray-800 mb-2">
+                    ¡Listo para crear contenido viral!
+                  </h3>
+                  <p className="text-gray-600">
+                    Configura tu contenido y haz clic en "Generar" para comenzar
+                  </p>
+                </div>
+            )}
+
+            {generatedContent && (
+                <div className="space-y-6">
+                  {Object.entries(generatedContent).map(([platform, content]) => (
+                      <ContentCard
+                          key={platform}
+                          platform={platform}
+                          content={content}
+                          onCopy={copyContent}
+                      />
+                  ))}
+                </div>
+            )}
           </div>
         </div>
       </div>
+  );
+};
 
-      {activeTab === 'creator' ? (
-        <div className="grid md:grid-cols-3 gap-6">
-          <div className="md:col-span-2 space-y-6">
-            {/* Selector de plataforma */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-              <div className="p-6">
-                <h2 className="text-lg font-medium text-gray-900 mb-4">1. Selecciona una plataforma</h2>
-                <SocialMediaTabs 
-                  platforms={platforms} 
-                  activePlatform={platform} 
-                  onChange={handlePlatformChange} 
-                />
-              </div>
+// Componente para mostrar el contenido generado
+const ContentCard = ({ platform, content, onCopy }) => {
+  const platformConfig = {
+    LinkedIn: { color: '#0077b5', icon: '💼' },
+    Twitter: { color: '#1da1f2', icon: '🐦' },
+    Facebook: { color: '#4267b2', icon: '📘' },
+    Instagram: { color: '#e1306c', icon: '📸' },
+  };
+
+  const config = platformConfig[platform] || platformConfig.LinkedIn;
+
+  return (
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-gray-50 to-gray-100 px-6 py-4 border-b">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <span className="text-2xl mr-2">{config.icon}</span>
+              <h3 className="text-lg font-semibold" style={{ color: config.color }}>
+                {platform}
+              </h3>
             </div>
-            
-            {/* Formulario de generación */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-              <div className="p-6">
-                <h2 className="text-lg font-medium text-gray-900 mb-4">
-                  2. ¿Sobre qué quieres crear contenido?
-                </h2>
-                
-                {platform === 'linkedin' && (
-                  <LinkedInGenerator 
-                    prompt={prompt}
-                    setPrompt={setPrompt}
-                    isGenerating={isGenerating}
-                    onSubmit={handleSubmit}
-                  />
-                )}
-                
-                {platform === 'twitter' && (
-                  <TwitterGenerator 
-                    prompt={prompt}
-                    setPrompt={setPrompt}
-                    isGenerating={isGenerating}
-                    onSubmit={handleSubmit}
-                  />
-                )}
-                
-                {(platform === 'facebook' || platform === 'instagram') && (
-                  <div className="p-8 text-center">
-                    <p className="text-gray-500">
-                      Generador para {platform === 'facebook' ? 'Facebook' : 'Instagram'} próximamente disponible.
-                    </p>
-                    <p className="text-sm text-gray-400 mt-2">
-                      Por favor, selecciona LinkedIn o Twitter por ahora.
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-            
-            {/* Contenido generado */}
-            {isGenerating ? (
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 flex items-center justify-center">
-                <LoadingSpinner size="lg" text="Generando contenido optimizado..." />
-              </div>
-            ) : (
-              generatedContent && (
-                <GeneratedContent 
-                  content={generatedContent} 
-                  platform={platform} 
-                />
-              )
-            )}
-          </div>
-          
-          {/* Sidebar con consejos */}
-          <div className="space-y-6">
-            <ContentTips 
-              platform={platform}
-              tips={platformTips[platform] || []}
-            />
-            
-            {/* Métricas de campañas (simplificado) */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-              <div className="p-5 border-b border-gray-200">
-                <h3 className="font-medium text-gray-900">Rendimiento reciente</h3>
-              </div>
-              <div className="p-5 space-y-4">
-                <div>
-                  <div className="flex justify-between text-sm mb-1">
-                    <span className="text-gray-500">Engagement</span>
-                    <span className="font-medium text-primary-600">+24%</span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div className="bg-primary-600 h-2 rounded-full" style={{ width: '24%' }}></div>
-                  </div>
-                </div>
-                
-                <div>
-                  <div className="flex justify-between text-sm mb-1">
-                    <span className="text-gray-500">Posts virales</span>
-                    <span className="font-medium text-primary-600">2 de 10</span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div className="bg-primary-600 h-2 rounded-full" style={{ width: '20%' }}></div>
-                  </div>
-                </div>
-                
-                <button className="mt-2 text-sm text-primary-600 hover:text-primary-800 font-medium">
-                  Ver informe completo →
-                </button>
-              </div>
-            </div>
+            <button
+                onClick={() => onCopy(content.content)}
+                className="flex items-center px-3 py-1 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              <span className="text-sm mr-1">📋</span>
+              <span className="text-sm">Copiar</span>
+            </button>
           </div>
         </div>
-      ) : (
-        // Tab de Analytics (simplificado)
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12">
-          <div className="text-center">
-            <h3 className="text-lg font-medium text-gray-900">Análisis de Engagement</h3>
-            <p className="mt-2 text-gray-500">
-              Esta sección estará disponible próximamente. Aquí podrás analizar el rendimiento
-              de tus publicaciones y compararlas con las tendencias del mercado.
+
+        {/* Contenido */}
+        <div className="p-6">
+          {content.title && (
+              <h4 className="text-xl font-bold mb-4 text-gray-800">
+                {content.title}
+              </h4>
+          )}
+
+          <div className="prose max-w-none mb-4">
+            <p className="text-gray-800 whitespace-pre-line">
+              {content.content}
             </p>
           </div>
+
+          {/* Hashtags */}
+          {content.hashtags && content.hashtags.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-4">
+                {content.hashtags.map((tag, index) => (
+                    <span
+                        key={index}
+                        className="inline-block px-2 py-1 bg-blue-50 text-blue-600 rounded-full text-sm"
+                    >
+                {tag.startsWith('#') ? tag : `#${tag}`}
+              </span>
+                ))}
+              </div>
+          )}
+
+          {/* Métricas */}
+          {content.metrics && (
+              <div className="grid grid-cols-3 gap-4 mt-4 p-4 bg-gray-50 rounded-lg">
+                <div className="text-center">
+                  <div className="text-xl font-bold text-indigo-600">
+                    {content.metrics.potencialViral || '85'}
+                  </div>
+                  <div className="text-xs text-gray-500">Potencial Viral</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-xl font-bold text-green-600">
+                    {content.metrics.engagementScore || '78'}
+                  </div>
+                  <div className="text-xs text-gray-500">Engagement</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-xl font-bold text-purple-600">
+                    {content.metrics.alcanceEstimado || '10K-15K'}
+                  </div>
+                  <div className="text-xs text-gray-500">Alcance Est.</div>
+                </div>
+              </div>
+          )}
+
+          {/* Warning si existe */}
+          {content.warning && (
+              <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <p className="text-sm text-yellow-800">⚠️ {content.warning}</p>
+              </div>
+          )}
         </div>
-      )}
-    </div>
+      </div>
   );
 };
 

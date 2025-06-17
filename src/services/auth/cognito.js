@@ -1,4 +1,4 @@
-// src/services/auth/cognito.js - Arreglar persistencia de sesión
+// src/services/auth/cognito.js - VERSIÓN LIMPIA SIN ERRORES
 import {
   CognitoUserPool,
   CognitoUser,
@@ -6,324 +6,310 @@ import {
   CognitoUserAttribute
 } from 'amazon-cognito-identity-js';
 
-// Configuración desde variables de entorno
+// Configuración desde .env
 const COGNITO_CONFIG = {
   USER_POOL_ID: import.meta.env.VITE_COGNITO_POOL_ID || 'us-east-1_Cs50bmhCD',
   CLIENT_ID: import.meta.env.VITE_COGNITO_CLIENT_ID || '285uke1u9affrh8phcievcoep7',
   REGION: import.meta.env.VITE_COGNITO_REGION || 'us-east-1',
 };
 
+console.log('🔐 Cognito Config:', COGNITO_CONFIG);
+
 const userPool = new CognitoUserPool({
   UserPoolId: COGNITO_CONFIG.USER_POOL_ID,
   ClientId: COGNITO_CONFIG.CLIENT_ID,
 });
 
-export const cognitoAuthService = {
-  // Iniciar sesión
-  signIn: (username, password) => {
+class CognitoService {
+  constructor() {
+    this.currentUser = null;
+    this.tokens = {};
+  }
+
+  // LOGIN principal
+  async signIn(email, password) {
+    console.log('🔑 Intentando login con:', email);
+    console.log('🔑 Password length:', password.length);
+    console.log('🔑 Password has special chars:', /[!@#$%^&*(),.?":{}|<>]/.test(password));
+
     return new Promise((resolve, reject) => {
-      try {
-        const authenticationDetails = new AuthenticationDetails({
-          Username: username,
-          Password: password,
-        });
+      const cleanEmail = email.trim().toLowerCase();
 
-        const cognitoUser = new CognitoUser({
-          Username: username,
-          Pool: userPool,
-        });
+      const authDetails = new AuthenticationDetails({
+        Username: cleanEmail,
+        Password: password,
+      });
 
-        cognitoUser.authenticateUser(authenticationDetails, {
-          onSuccess: (result) => {
-            // Obtener tokens
-            const accessToken = result.getAccessToken().getJwtToken();
-            const idToken = result.getIdToken().getJwtToken();
-            const refreshToken = result.getRefreshToken().getToken();
+      const cognitoUser = new CognitoUser({
+        Username: cleanEmail,
+        Pool: userPool,
+      });
 
-            // Guardar tokens de forma persistente
-            const tokenData = {
-              accessToken,
-              idToken,
-              refreshToken,
-              expiration: new Date().getTime() + (60 * 60 * 1000), // 1 hora
-              timestamp: new Date().getTime()
-            };
+      cognitoUser.authenticateUser(authDetails, {
+        onSuccess: (result) => {
+          console.log('✅ Login exitoso');
 
-            localStorage.setItem('viralia_auth', JSON.stringify(tokenData));
+          this.tokens = {
+            idToken: result.getIdToken().getJwtToken(),
+            accessToken: result.getAccessToken().getJwtToken(),
+            refreshToken: result.getRefreshToken().getToken()
+          };
 
-            // Obtener atributos del usuario
-            cognitoUser.getUserAttributes((err, attributes) => {
-              if (err) {
-                console.error('Error getting user attributes:', err);
-                resolve({
-                  success: true,
-                  user: { username: cognitoUser.getUsername() }
-                });
-                return;
-              }
+          this._saveTokens();
 
-              const userData = {};
-              attributes.forEach(attribute => {
-                userData[attribute.getName()] = attribute.getValue();
-              });
-
+          cognitoUser.getUserAttributes((err, attributes) => {
+            if (err) {
+              console.warn('⚠️ Error obteniendo atributos:', err);
               resolve({
                 success: true,
                 user: {
-                  ...userData,
-                  username: cognitoUser.getUsername()
+                  username: cognitoUser.getUsername(),
+                  email: cleanEmail
                 }
               });
-            });
-          },
-          onFailure: (err) => {
-            reject(mapCognitoError(err));
-          },
-          newPasswordRequired: (userAttributes, requiredAttributes) => {
+              return;
+            }
+
+            const userData = this._parseAttributes(attributes);
+            this.currentUser = {
+              ...userData,
+              username: cognitoUser.getUsername()
+            };
+
             resolve({
               success: true,
-              requireNewPassword: true,
-              userAttributes,
-              requiredAttributes
+              user: this.currentUser
             });
-          }
-        });
-      } catch (error) {
-        reject(mapCognitoError(error));
-      }
+          });
+        },
+
+        onFailure: (err) => {
+          console.error('❌ Login falló:', err);
+          reject(this._mapError(err));
+        },
+
+        newPasswordRequired: (userAttributes) => {
+          console.log('🔄 Nueva contraseña requerida');
+          resolve({
+            success: true,
+            requireNewPassword: true,
+            userAttributes
+          });
+        }
+      });
     });
-  },
+  }
 
-  // Verificar si el usuario está autenticado
-  isAuthenticated: () => {
-    return new Promise((resolve) => {
-      try {
-        // Verificar tokens en localStorage primero
-        const storedTokens = localStorage.getItem('viralia_auth');
-        if (!storedTokens) {
-          resolve(false);
-          return;
-        }
+  // Verificar si está autenticado
+  async isAuthenticated() {
+    try {
+      const tokens = this._getStoredTokens();
+      if (!tokens || this._isTokenExpired(tokens)) {
+        console.log('❌ No hay tokens válidos');
+        this._clearTokens();
+        return false;
+      }
 
-        const tokenData = JSON.parse(storedTokens);
+      const cognitoUser = userPool.getCurrentUser();
+      if (!cognitoUser) {
+        console.log('❌ No hay usuario en Cognito');
+        this._clearTokens();
+        return false;
+      }
 
-        // Verificar si el token ha expirado
-        if (tokenData.expiration < new Date().getTime()) {
-          localStorage.removeItem('viralia_auth');
-          resolve(false);
-          return;
-        }
-
-        // Verificar con Cognito
-        const cognitoUser = userPool.getCurrentUser();
-
-        if (!cognitoUser) {
-          localStorage.removeItem('viralia_auth');
-          resolve(false);
-          return;
-        }
-
+      return new Promise((resolve) => {
         cognitoUser.getSession((err, session) => {
           if (err || !session.isValid()) {
-            localStorage.removeItem('viralia_auth');
+            console.log('❌ Sesión inválida:', err);
+            this._clearTokens();
             resolve(false);
             return;
           }
 
-          // Actualizar tokens si la sesión es válida
-          const newTokenData = {
-            accessToken: session.getAccessToken().getJwtToken(),
+          console.log('✅ Sesión válida');
+          this.tokens = {
             idToken: session.getIdToken().getJwtToken(),
-            refreshToken: session.getRefreshToken().getToken(),
-            expiration: new Date().getTime() + (60 * 60 * 1000),
-            timestamp: new Date().getTime()
+            accessToken: session.getAccessToken().getJwtToken(),
+            refreshToken: session.getRefreshToken().getToken()
           };
-
-          localStorage.setItem('viralia_auth', JSON.stringify(newTokenData));
+          this._saveTokens();
           resolve(true);
         });
-      } catch (error) {
-        console.error('Error verificando autenticación:', error);
-        localStorage.removeItem('viralia_auth');
-        resolve(false);
-      }
-    });
-  },
+      });
+    } catch (error) {
+      console.error('❌ Error verificando auth:', error);
+      this._clearTokens();
+      return false;
+    }
+  }
 
-  // Obtener el usuario actual
-  getCurrentUser: () => {
+  // Obtener usuario actual
+  async getCurrentUser() {
+    if (this.currentUser) {
+      return this.currentUser;
+    }
+
+    const cognitoUser = userPool.getCurrentUser();
+    if (!cognitoUser) {
+      return null;
+    }
+
     return new Promise((resolve) => {
-      try {
-        const cognitoUser = userPool.getCurrentUser();
-
-        if (!cognitoUser) {
+      cognitoUser.getSession((err, session) => {
+        if (err || !session.isValid()) {
           resolve(null);
           return;
         }
 
-        cognitoUser.getSession((err, session) => {
-          if (err || !session.isValid()) {
-            resolve(null);
+        cognitoUser.getUserAttributes((err, attributes) => {
+          if (err) {
+            resolve({
+              username: cognitoUser.getUsername()
+            });
             return;
           }
 
-          cognitoUser.getUserAttributes((err, attributes) => {
-            if (err) {
-              resolve({ username: cognitoUser.getUsername() });
-              return;
-            }
+          const userData = this._parseAttributes(attributes);
+          this.currentUser = {
+            ...userData,
+            username: cognitoUser.getUsername()
+          };
 
-            const userData = {};
-            attributes.forEach(attr => {
-              userData[attr.getName()] = attr.getValue();
-            });
-
-            resolve({
-              ...userData,
-              username: cognitoUser.getUsername()
-            });
-          });
+          resolve(this.currentUser);
         });
-      } catch (error) {
-        console.error('Error obteniendo usuario actual:', error);
-        resolve(null);
-      }
+      });
     });
-  },
+  }
 
   // Cerrar sesión
-  signOut: () => {
+  signOut() {
     try {
       const cognitoUser = userPool.getCurrentUser();
       if (cognitoUser) {
         cognitoUser.signOut();
       }
-
-      // Limpiar tokens
-      localStorage.removeItem('viralia_auth');
-      sessionStorage.clear();
     } catch (error) {
-      console.error('Error durante el cierre de sesión:', error);
-      // Asegurar que se limpien los tokens aunque haya error
-      localStorage.removeItem('viralia_auth');
-      sessionStorage.clear();
+      console.warn('⚠️ Error en signOut:', error);
+    } finally {
+      this._clearTokens();
+      this.currentUser = null;
+      console.log('✅ Sesión cerrada');
     }
-  },
+  }
 
   // Refrescar sesión
-  refreshSession: () => {
-    return new Promise((resolve, reject) => {
-      try {
-        const cognitoUser = userPool.getCurrentUser();
+  async refreshSession() {
+    const cognitoUser = userPool.getCurrentUser();
+    if (!cognitoUser) {
+      throw new Error('No hay usuario autenticado');
+    }
 
-        if (!cognitoUser) {
-          reject(new Error('No hay usuario autenticado'));
+    return new Promise((resolve, reject) => {
+      cognitoUser.getSession((err, session) => {
+        if (err) {
+          this._clearTokens();
+          reject(err);
           return;
         }
 
-        cognitoUser.getSession((err, session) => {
-          if (err) {
-            localStorage.removeItem('viralia_auth');
-            reject(err);
-            return;
-          }
-
-          if (session.isValid()) {
-            // Actualizar tokens
-            const tokenData = {
-              accessToken: session.getAccessToken().getJwtToken(),
-              idToken: session.getIdToken().getJwtToken(),
-              refreshToken: session.getRefreshToken().getToken(),
-              expiration: new Date().getTime() + (60 * 60 * 1000),
-              timestamp: new Date().getTime()
-            };
-
-            localStorage.setItem('viralia_auth', JSON.stringify(tokenData));
-            resolve({ success: true });
-          } else {
-            localStorage.removeItem('viralia_auth');
-            reject(new Error('Sesión inválida'));
-          }
-        });
-      } catch (error) {
-        localStorage.removeItem('viralia_auth');
-        reject(error);
-      }
-    });
-  },
-
-  // Resto de métodos (registro, confirmación, etc.)
-  signUp: (username, email, password, additionalData = {}) => {
-    return new Promise((resolve, reject) => {
-      try {
-        const attributeList = [];
-
-        const emailAttribute = new CognitoUserAttribute({
-          Name: 'email',
-          Value: email
-        });
-        attributeList.push(emailAttribute);
-
-        Object.entries(additionalData).forEach(([key, value]) => {
-          const attribute = new CognitoUserAttribute({
-            Name: key,
-            Value: value
-          });
-          attributeList.push(attribute);
-        });
-
-        userPool.signUp(username, password, attributeList, null, (err, result) => {
-          if (err) {
-            reject(mapCognitoError(err));
-            return;
-          }
-
-          resolve({
-            success: true,
-            userConfirmed: result.userConfirmed,
-            username: result.user.getUsername()
-          });
-        });
-      } catch (error) {
-        reject(mapCognitoError(error));
-      }
+        if (session.isValid()) {
+          this.tokens = {
+            idToken: session.getIdToken().getJwtToken(),
+            accessToken: session.getAccessToken().getJwtToken(),
+            refreshToken: session.getRefreshToken().getToken()
+          };
+          this._saveTokens();
+          resolve({ success: true });
+        } else {
+          this._clearTokens();
+          reject(new Error('Sesión inválida'));
+        }
+      });
     });
   }
-};
 
-// Mapear errores de Cognito
-function mapCognitoError(error) {
-  let message = 'Error desconocido';
+  // Obtener headers para API
+  getAuthHeaders() {
+    const tokens = this._getStoredTokens();
+    if (!tokens?.idToken) {
+      return {};
+    }
 
-  if (error.message) {
-    switch (error.code || error.name) {
-      case 'NotAuthorizedException':
-        message = 'Credenciales incorrectas. Verifica tu usuario y contraseña.';
-        break;
-      case 'UserNotFoundException':
-        message = 'No existe un usuario con ese correo o nombre de usuario.';
-        break;
-      case 'UsernameExistsException':
-        message = 'Ya existe un usuario con ese correo o nombre de usuario.';
-        break;
-      case 'CodeMismatchException':
-        message = 'El código ingresado es incorrecto.';
-        break;
-      case 'ExpiredCodeException':
-        message = 'El código ha expirado. Solicita uno nuevo.';
-        break;
-      case 'InvalidPasswordException':
-        message = 'La contraseña no cumple los requisitos de seguridad.';
-        break;
-      case 'LimitExceededException':
-        message = 'Has excedido el límite de intentos. Intenta más tarde.';
-        break;
-      default:
-        message = error.message;
+    return {
+      'Authorization': 'Bearer ' + tokens.idToken,
+      'X-API-Key': import.meta.env.VITE_API_KEY,
+      'Content-Type': 'application/json'
+    };
+  }
+
+  // Métodos privados
+  _saveTokens() {
+    try {
+      const tokenData = {
+        ...this.tokens,
+        expiration: Date.now() + (60 * 60 * 1000),
+        timestamp: Date.now()
+      };
+      localStorage.setItem('viralia_auth', JSON.stringify(tokenData));
+      console.log('💾 Tokens guardados');
+    } catch (error) {
+      console.error('❌ Error guardando tokens:', error);
     }
   }
 
-  const mappedError = new Error(message);
-  mappedError.originalError = error;
-  return mappedError;
+  _getStoredTokens() {
+    try {
+      const stored = localStorage.getItem('viralia_auth');
+      return stored ? JSON.parse(stored) : null;
+    } catch (error) {
+      console.error('❌ Error leyendo tokens:', error);
+      return null;
+    }
+  }
+
+  _isTokenExpired(tokenData) {
+    if (!tokenData.expiration) return true;
+    return Date.now() > tokenData.expiration;
+  }
+
+  _clearTokens() {
+    this.tokens = {};
+    try {
+      localStorage.removeItem('viralia_auth');
+      sessionStorage.clear();
+    } catch (error) {
+      console.warn('⚠️ Error limpiando tokens:', error);
+    }
+  }
+
+  _parseAttributes(attributes) {
+    const userData = {};
+    if (attributes) {
+      attributes.forEach(attr => {
+        userData[attr.getName()] = attr.getValue();
+      });
+    }
+    return userData;
+  }
+
+  _mapError(error) {
+    const errorMap = {
+      'NotAuthorizedException': 'Email o contraseña incorrectos',
+      'UserNotFoundException': 'Usuario no encontrado',
+      'UserNotConfirmedException': 'Usuario no confirmado. Revisa tu email.',
+      'PasswordResetRequiredException': 'Es necesario cambiar la contraseña',
+      'InvalidPasswordException': 'Contraseña inválida',
+      'LimitExceededException': 'Demasiados intentos. Intenta más tarde.',
+      'TooManyRequestsException': 'Demasiadas solicitudes. Espera un momento.',
+    };
+
+    const message = errorMap[error.code] || error.message || 'Error de autenticación';
+    console.error('🚨 Error mapeado:', message);
+
+    return new Error(message);
+  }
 }
+
+// Instancia singleton
+export const cognitoService = new CognitoService();
+export default cognitoService;
