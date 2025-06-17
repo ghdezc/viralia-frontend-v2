@@ -1,93 +1,115 @@
-// src/App.jsx
+// src/App.jsx - Con autenticación segura
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Suspense, lazy } from 'react';
+import { Toaster } from 'react-hot-toast';
 import { AuthProvider } from './context/AuthContext';
-import { ToastProvider } from './context/ToastContext';
-import AppLayout from './components/layout/AppLayout';
-import LoadingScreen from './components/common/LoadingScreen';
 import ProtectedRoute from './components/auth/ProtectedRoute';
-import TailwindTest from './components/TailwindTest';
 
-
-// Lazy loading de páginas para mejor performance
+// Lazy loading de páginas
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const ContentGenerator = lazy(() => import('./pages/ContentGenerator'));
-const Campaigns = lazy(() => import('./pages/Campaigns'));
-const Analytics = lazy(() => import('./pages/Analytics'));
 const Login = lazy(() => import('./pages/auth/Login'));
-const Register = lazy(() => import('./pages/auth/Register'));
-const Settings = lazy(() => import('./pages/Settings'));
-const ForgotPassword = lazy(() => import('./pages/auth/ForgotPassword'));
-const ConfirmRegistration = lazy(() => import('./pages/auth/ConfirmRegistration'));
-const AccessDenied = lazy(() => import('./pages/auth/AccessDenied'));
-const UpgradePlan = lazy(() => import('./pages/UpgradePlan'));
-const NotFound = lazy(() => import('./pages/NotFound'));
+const AppLayout = lazy(() => import('./components/layout/AppLayout'));
 
-/**
- * Componente principal de la aplicación
- * IMPORTANTE: ToastProvider debe envolver a AuthProvider ya que AuthProvider usa useToast
- */
+// Loading component
+const LoadingScreen = () => (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+        <p className="mt-4 text-gray-600">Cargando Viralia...</p>
+      </div>
+    </div>
+);
+
 function App() {
   return (
-    <Router>
-      <ToastProvider>
+      <Router>
         <AuthProvider>
+          {/* Toast notifications */}
+          <Toaster
+              position="top-right"
+              toastOptions={{
+                duration: 4000,
+                style: {
+                  background: '#363636',
+                  color: '#fff',
+                },
+                success: {
+                  duration: 3000,
+                  iconTheme: {
+                    primary: '#4ade80',
+                    secondary: '#fff',
+                  },
+                },
+                error: {
+                  duration: 5000,
+                  iconTheme: {
+                    primary: '#ef4444',
+                    secondary: '#fff',
+                  },
+                },
+              }}
+          />
+
           <Suspense fallback={<LoadingScreen />}>
             <Routes>
               {/* Rutas públicas */}
               <Route path="/login" element={<Login />} />
-              <Route path="/register" element={<Register />} />
-              <Route path="/forgot-password" element={<ForgotPassword />} />
-              <Route path="/confirm-registration" element={<ConfirmRegistration />} />
-              
-              {/* Rutas de acceso denegado */}
-              <Route path="/access-denied" element={<AccessDenied />} />
-              <Route path="/upgrade-plan" element={<UpgradePlan />} />
-              
-              {/* Rutas protegidas dentro del layout principal */}
-              <Route element={
+
+              {/* Rutas protegidas */}
+              <Route path="/" element={
                 <ProtectedRoute>
                   <AppLayout />
                 </ProtectedRoute>
               }>
-                {/* Dashboard - acceso básico */}
-                <Route path="/dashboard" element={<Dashboard />} />
-                
-                {/* Generador de contenido - acceso según rol */}
-                <Route path="/generator" element={
-                  <ProtectedRoute roles={['user', 'admin', 'editor']}>
-                    <ContentGenerator />
+                {/* Dashboard */}
+                <Route index element={<Navigate to="/dashboard" replace />} />
+                <Route path="dashboard" element={<Dashboard />} />
+
+                {/* Generador de contenido */}
+                <Route path="generator" element={<ContentGenerator />} />
+
+                {/* Otras rutas protegidas */}
+                <Route path="campaigns" element={
+                  <ProtectedRoute requiredPlan="pro">
+                    <div className="p-8 text-center">
+                      <h2 className="text-2xl font-bold text-gray-900">Campañas</h2>
+                      <p className="text-gray-600 mt-2">Próximamente disponible</p>
+                    </div>
                   </ProtectedRoute>
                 } />
-                
-                {/* Campañas - requiere plan pro o admin */}
-                <Route path="/campaigns" element={
-                  <ProtectedRoute roles={['admin', 'editor']} requiredPlan="pro">
-                    <Campaigns />
-                  </ProtectedRoute>
+
+                <Route path="analytics" element={
+                  <div className="p-8 text-center">
+                    <h2 className="text-2xl font-bold text-gray-900">Analytics</h2>
+                    <p className="text-gray-600 mt-2">Próximamente disponible</p>
+                  </div>
                 } />
-                
-                {/* Analytics - acceso según rol */}
-                <Route path="/analytics" element={
-                  <ProtectedRoute roles={['admin', 'editor', 'analyst']}>
-                    <Analytics />
-                  </ProtectedRoute>
+
+                <Route path="settings" element={
+                  <div className="p-8 text-center">
+                    <h2 className="text-2xl font-bold text-gray-900">Configuración</h2>
+                    <p className="text-gray-600 mt-2">Próximamente disponible</p>
+                  </div>
                 } />
-                
-                {/* Configuración - acceso para todos los autenticados */}
-                <Route path="/settings" element={<Settings />} />
               </Route>
-              
-              {/* Redirección por defecto */}
-              <Route path="/" element={<Navigate to="/dashboard" replace />} />
-              
-              {/* Ruta 404 para cualquier ruta no coincidente */}
-              <Route path="*" element={<NotFound />} />
+
+              {/* Ruta 404 */}
+              <Route path="*" element={
+                <div className="min-h-screen flex items-center justify-center bg-gray-50">
+                  <div className="text-center">
+                    <h1 className="text-6xl font-bold text-gray-300">404</h1>
+                    <p className="text-xl text-gray-600 mt-4">Página no encontrada</p>
+                    <a href="/" className="text-blue-600 hover:text-blue-800 mt-4 inline-block">
+                      Volver al inicio
+                    </a>
+                  </div>
+                </div>
+              } />
             </Routes>
           </Suspense>
         </AuthProvider>
-      </ToastProvider>
-    </Router>
+      </Router>
   );
 }
 

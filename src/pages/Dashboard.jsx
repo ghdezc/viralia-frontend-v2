@@ -1,231 +1,228 @@
-// src/pages/Dashboard.jsx
+// src/pages/Dashboard.jsx - Versión optimizada y limpia
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import LoadingSpinner from '../components/common/LoadingSpinner';
+import { motion } from 'framer-motion';
+import {
+  Zap,
+  TrendingUp,
+  Users,
+  BarChart3,
+  Plus,
+  ArrowRight,
+  Sparkles
+} from 'lucide-react';
 
-/**
- * Dashboard principal de la aplicación
- * Muestra resumen de actividad y métricas clave
- */
 const Dashboard = () => {
-  const [isLoading, setIsLoading] = useState(true);
-  const [stats, setStats] = useState(null);
   const { user } = useAuth();
+  const [stats, setStats] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Simular carga de datos
   useEffect(() => {
-    const fetchData = async () => {
-      // En un entorno real, esto sería una llamada a la API
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Datos de ejemplo
+    // Simular carga optimizada
+    const loadData = async () => {
+      await new Promise(resolve => setTimeout(resolve, 800));
       setStats({
         contentGenerated: 23,
         engagementRate: 12.4,
         virality: 8.7,
-        pendingCampaigns: 3,
-        recentActivity: [
-          { id: 1, type: 'content', title: 'Tweet sobre estrategias de marketing', date: '2025-04-12', platform: 'twitter' },
-          { id: 2, type: 'content', title: 'Post sobre tendencias IA', date: '2025-04-10', platform: 'linkedin' },
-          { id: 3, type: 'campaign', title: 'Lanzamiento Q2', date: '2025-04-08', status: 'active' }
-        ]
+        totalReach: 45200
       });
-      
       setIsLoading(false);
     };
-    
-    fetchData();
+    loadData();
   }, []);
 
   if (isLoading) {
-    return <LoadingSpinner text="Cargando panel de control..." />;
+    return <LoadingSkeleton />;
   }
 
   return (
-    <div className="space-y-6">
-      {/* Encabezado */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">
-          Bienvenido, {user?.name?.split(' ')[0] || 'Usuario'}
-        </h1>
-        <p className="text-gray-600 mt-1">
-          Aquí tienes el resumen de tu actividad reciente y métricas clave.
-        </p>
-      </div>
-      
-      {/* Tarjetas de métricas */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <MetricCard 
-          title="Contenido Generado" 
-          value={stats.contentGenerated} 
-          icon="document" 
-          change={+15}
-          color="indigo"
-        />
-        <MetricCard 
-          title="Tasa de Engagement" 
-          value={`${stats.engagementRate}%`} 
-          icon="chart" 
-          change={+2.3}
-          color="blue"
-        />
-        <MetricCard 
-          title="Índice de Viralidad" 
-          value={stats.virality.toFixed(1)} 
-          icon="trend" 
-          change={-0.5}
-          color="purple"
-        />
-        <MetricCard 
-          title="Campañas Pendientes" 
-          value={stats.pendingCampaigns} 
-          icon="calendar" 
-          color="pink"
-        />
-      </div>
-      
-      {/* Actividad reciente */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="font-semibold text-gray-800">Actividad Reciente</h2>
-        </div>
-        <div className="divide-y divide-gray-200">
-          {stats.recentActivity.map(activity => (
-            <div key={activity.id} className="px-6 py-4 flex items-center justify-between">
-              <div>
-                <h3 className="font-medium text-gray-900">{activity.title}</h3>
-                <p className="text-sm text-gray-500 mt-1">
-                  {activity.type === 'content' 
-                    ? `Contenido para ${activity.platform}` 
-                    : `Campaña ${activity.status}`}
-                </p>
-              </div>
-              <div className="text-sm text-gray-500">
-                {formatDate(activity.date)}
-              </div>
-            </div>
-          ))}
-        </div>
-        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200">
-          <a href="#" className="text-sm font-medium text-indigo-600 hover:text-indigo-800">
-            Ver toda la actividad →
-          </a>
-        </div>
-      </div>
-      
-      {/* Panel de acciones rápidas */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="font-semibold text-gray-800">Acciones Rápidas</h2>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-gray-200">
-          <QuickAction 
-            title="Crear Contenido" 
-            description="Genera nuevo contenido para redes sociales"
-            actionText="Crear ahora"
-            actionLink="/generator"
+      <div className="space-y-8">
+        {/* Header Hero */}
+        <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="relative bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 rounded-3xl p-8 text-white overflow-hidden"
+        >
+          <div className="relative z-10">
+            <h1 className="text-3xl font-bold mb-2">
+              ¡Hola, {user?.name?.split(' ')[0] || 'Creador'}! 👋
+            </h1>
+            <p className="text-indigo-100 text-lg mb-6">
+              Tu contenido está generando excelentes resultados
+            </p>
+
+            <Link
+                to="/generator"
+                className="inline-flex items-center gap-2 bg-white/20 hover:bg-white/30 backdrop-blur-sm px-6 py-3 rounded-xl font-medium transition-all"
+            >
+              <Plus className="w-5 h-5" />
+              Crear contenido
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+
+          {/* Elementos decorativos */}
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-32 translate-x-32" />
+          <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full translate-y-24 -translate-x-24" />
+        </motion.div>
+
+        {/* Métricas principales */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <MetricCard
+              icon={<Zap className="w-6 h-6" />}
+              title="Contenido generado"
+              value={stats.contentGenerated}
+              change={+15}
+              color="indigo"
           />
-          <QuickAction 
-            title="Programar Publicación" 
-            description="Programa contenido para publicar automáticamente"
-            actionText="Programar"
-            actionLink="/campaigns"
+          <MetricCard
+              icon={<TrendingUp className="w-6 h-6" />}
+              title="Engagement"
+              value={`${stats.engagementRate}%`}
+              change={+2.3}
+              color="emerald"
           />
-          <QuickAction 
-            title="Ver Analíticas" 
-            description="Revisa el rendimiento de tu contenido"
-            actionText="Ver datos"
-            actionLink="/analytics"
+          <MetricCard
+              icon={<Sparkles className="w-6 h-6" />}
+              title="Índice viral"
+              value={stats.virality.toFixed(1)}
+              change={-0.5}
+              color="purple"
+          />
+          <MetricCard
+              icon={<Users className="w-6 h-6" />}
+              title="Alcance total"
+              value={formatNumber(stats.totalReach)}
+              change={+24}
+              color="blue"
           />
         </div>
+
+        {/* Acciones rápidas */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <QuickActionCard
+              icon={<Zap className="w-8 h-8" />}
+              title="Generar contenido"
+              description="Crea posts virales con IA"
+              link="/generator"
+              gradient="from-indigo-500 to-purple-600"
+          />
+          <QuickActionCard
+              icon={<BarChart3 className="w-8 h-8" />}
+              title="Ver analytics"
+              description="Analiza tu rendimiento"
+              link="/analytics"
+              gradient="from-emerald-500 to-teal-600"
+          />
+          <QuickActionCard
+              icon={<TrendingUp className="w-8 h-8" />}
+              title="Campañas"
+              description="Programa publicaciones"
+              link="/campaigns"
+              gradient="from-purple-500 to-pink-600"
+          />
+        </div>
+
+        {/* Actividad reciente simplificada */}
+        <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="bg-white rounded-2xl border border-gray-100 p-6"
+        >
+          <h3 className="text-lg font-semibold mb-4">Actividad reciente</h3>
+          <div className="space-y-3">
+            {[
+              { title: 'Post viral sobre IA', platform: 'LinkedIn', engagement: '+87%' },
+              { title: 'Thread sobre tendencias', platform: 'Twitter', engagement: '+52%' },
+              { title: 'Análisis de mercado', platform: 'LinkedIn', engagement: '+34%' }
+            ].map((item, i) => (
+                <div key={i} className="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg transition-colors">
+                  <div>
+                    <p className="font-medium text-gray-900">{item.title}</p>
+                    <p className="text-sm text-gray-500">{item.platform}</p>
+                  </div>
+                  <span className="text-sm font-medium text-emerald-600">{item.engagement}</span>
+                </div>
+            ))}
+          </div>
+        </motion.div>
       </div>
-    </div>
   );
 };
 
-// Componente para tarjeta de métrica
-const MetricCard = ({ title, value, icon, change, color = 'indigo' }) => {
+// Componente de métrica optimizado
+const MetricCard = ({ icon, title, value, change, color }) => {
   const colors = {
-    indigo: 'bg-indigo-50 text-indigo-700 border-indigo-200',
-    blue: 'bg-blue-50 text-blue-700 border-blue-200',
-    purple: 'bg-purple-50 text-purple-700 border-purple-200',
-    pink: 'bg-pink-50 text-pink-700 border-pink-200',
+    indigo: 'from-indigo-500 to-indigo-600',
+    emerald: 'from-emerald-500 to-emerald-600',
+    purple: 'from-purple-500 to-purple-600',
+    blue: 'from-blue-500 to-blue-600'
   };
-  
-  const getIcon = () => {
-    switch(icon) {
-      case 'document':
-        return (
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-        );
-      case 'chart':
-        return (
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-          </svg>
-        );
-      case 'trend':
-        return (
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-          </svg>
-        );
-      case 'calendar':
-        return (
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
-        );
-      default:
-        return (
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-          </svg>
-        );
-    }
-  };
-  
-  return (
-    <div className={`rounded-xl border ${colors[color]} p-4 flex items-center justify-between`}>
-      <div>
-        <p className="text-sm font-medium">{title}</p>
-        <p className="text-2xl font-bold mt-1">{value}</p>
-        {change !== undefined && (
-          <p className={`text-xs mt-1 ${change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-            {change >= 0 ? '↑' : '↓'} {Math.abs(change)}% vs. mes anterior
-          </p>
-        )}
-      </div>
-      <div className={`p-3 rounded-lg ${colors[color]}`}>
-        {getIcon()}
-      </div>
-    </div>
-  );
-};
 
-// Componente para acción rápida
-const QuickAction = ({ title, description, actionText, actionLink }) => {
   return (
-    <div className="p-6">
-      <h3 className="font-medium text-gray-900">{title}</h3>
-      <p className="mt-2 text-sm text-gray-500">{description}</p>
-      <a 
-        href={actionLink} 
-        className="mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+      <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="bg-white rounded-xl border border-gray-100 p-6 hover:shadow-lg transition-all duration-300"
       >
-        {actionText}
-      </a>
-    </div>
+        <div className="flex items-center justify-between mb-4">
+          <div className={`p-3 rounded-xl bg-gradient-to-br ${colors[color]} text-white`}>
+            {icon}
+          </div>
+          {change !== undefined && (
+              <span className={`text-sm font-medium ${change >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+            {change >= 0 ? '+' : ''}{change}%
+          </span>
+          )}
+        </div>
+
+        <div>
+          <p className="text-2xl font-bold text-gray-900 mb-1">{value}</p>
+          <p className="text-sm text-gray-500">{title}</p>
+        </div>
+      </motion.div>
   );
 };
 
-// Helper para formatear fechas
-const formatDate = (dateString) => {
-  const options = { year: 'numeric', month: 'short', day: 'numeric' };
-  const date = new Date(dateString);
-  return date.toLocaleDateString('es-ES', options);
+// Tarjeta de acción rápida optimizada
+const QuickActionCard = ({ icon, title, description, link, gradient }) => (
+    <Link to={link}>
+      <motion.div
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          className={`relative bg-gradient-to-br ${gradient} rounded-2xl p-6 text-white overflow-hidden cursor-pointer`}
+      >
+        <div className="relative z-10">
+          <div className="mb-4 opacity-80">{icon}</div>
+          <h3 className="text-lg font-semibold mb-2">{title}</h3>
+          <p className="text-white/80 text-sm">{description}</p>
+        </div>
+
+        <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-16 translate-x-16" />
+      </motion.div>
+    </Link>
+);
+
+// Esqueleto de carga
+const LoadingSkeleton = () => (
+    <div className="space-y-8">
+      <div className="bg-gray-200 rounded-3xl h-48 animate-pulse" />
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {[...Array(4)].map((_, i) => (
+            <div key={i} className="bg-gray-200 rounded-xl h-32 animate-pulse" />
+        ))}
+      </div>
+    </div>
+);
+
+// Utilidad para formatear números
+const formatNumber = (num) => {
+  if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+  if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+  return num.toString();
 };
 
 export default Dashboard;

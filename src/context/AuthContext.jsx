@@ -1,305 +1,145 @@
-// src/context/AuthContext.jsx
-import { createContext, useState, useEffect } from 'react';
-import { cognitoAuthService } from '../services/auth/cognito';
-import { useToast } from './ToastContext';
+// src/context/AuthContext.jsx - Context seguro de autenticación
+import { createContext, useContext, useState, useEffect } from 'react';
+import { cognitoAuth } from '../services/auth/cognitoAuth';
+import toast from 'react-hot-toast';
 
-// Crear el contexto de autenticación
-export const AuthContext = createContext();
+const AuthContext = createContext();
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const toast = useToast();
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-  // Comprobar si hay un usuario autenticado al cargar
+  // Verificar autenticación al cargar
   useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        setLoading(true);
-        
-        const isAuthenticated = await cognitoAuthService.isAuthenticated();
-        
-        if (isAuthenticated) {
-          // Obtener usuario actual de Cognito
-          const currentUser = cognitoAuthService.getCurrentUser();
-          
-          // Obtener atributos del usuario
-          if (currentUser) {
-            currentUser.getUserAttributes((err, attributes) => {
-              if (err) {
-                console.error('Error getting user attributes:', err);
-                setUser(null);
-                return;
-              }
-              
-              const userData = {};
-              if (attributes) {
-                attributes.forEach(attr => {
-                  userData[attr.getName()] = attr.getValue();
-                });
-              }
-              
-              setUser({
-                ...userData,
-                username: currentUser.getUsername(),
-              });
-            });
-          }
-        } else {
-          setUser(null);
-        }
-      } catch (err) {
-        console.error('Auth check error:', err);
-        setError(err.message);
-        setUser(null);
-      } finally {
-        setLoading(false);
-      }
-    };
-    
-    checkAuth();
+    checkAuthStatus();
   }, []);
 
-  // Iniciar sesión
+  const checkAuthStatus = async () => {
+    try {
+      setLoading(true);
+
+      const authenticated = await cognitoAuth.isAuthenticated();
+
+      if (authenticated) {
+        const userData = await cognitoAuth.getCurrentUser();
+        setUser(userData);
+        setIsAuthenticated(true);
+      } else {
+        setUser(null);
+        setIsAuthenticated(false);
+      }
+    } catch (error) {
+      console.error('Auth check failed:', error);
+      setUser(null);
+      setIsAuthenticated(false);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Login
   const login = async (username, password) => {
     try {
       setLoading(true);
-      setError(null);
-      
-      const result = await cognitoAuthService.signIn(username, password);
-      
+
+      const result = await cognitoAuth.signIn(username, password);
+
       if (result.success) {
         if (result.requireNewPassword) {
-          // Manejar caso de cambio de contraseña requerido
           return {
             success: true,
             requireNewPassword: true,
-            userAttributes: result.userAttributes,
-            requiredAttributes: result.requiredAttributes,
+            ...result
           };
         }
-        
+
         setUser(result.user);
-        toast.success('Inicio de sesión exitoso');
+        setIsAuthenticated(true);
+
+        toast.success(`¡Bienvenido ${result.user.name || result.user.email}!`);
+
         return { success: true };
-      } else {
-        throw new Error('Inicio de sesión fallido');
       }
-    } catch (err) {
-      console.error('Login error:', err);
-      setError(err.message);
-      toast.error(err.message || 'Error al iniciar sesión');
-      return { success: false, error: err.message };
+
+      throw new Error('Login failed');
+    } catch (error) {
+      console.error('Login error:', error);
+      toast.error(error.message);
+      return { success: false, error: error.message };
     } finally {
       setLoading(false);
     }
   };
 
-  // Registro
-  const register = async (username, email, password, additionalData = {}) => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      const result = await cognitoAuthService.signUp(
-        username,
-        email,
-        password,
-        additionalData
-      );
-      
-      if (result.success) {
-        toast.success('Registro exitoso. Por favor revisa tu correo para confirmar tu cuenta.');
-        return { 
-          success: true, 
-          userConfirmed: result.userConfirmed,
-          username: result.username
-        };
-      } else {
-        throw new Error('Registro fallido');
-      }
-    } catch (err) {
-      console.error('Register error:', err);
-      setError(err.message);
-      toast.error(err.message || 'Error al registrarse');
-      return { success: false, error: err.message };
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Confirmar registro
-  const confirmRegistration = async (username, confirmationCode) => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      const result = await cognitoAuthService.confirmSignUp(username, confirmationCode);
-      
-      toast.success('Cuenta confirmada exitosamente. Ahora puedes iniciar sesión.');
-      return { success: true };
-    } catch (err) {
-      console.error('Confirmation error:', err);
-      setError(err.message);
-      toast.error(err.message || 'Error al confirmar la cuenta');
-      return { success: false, error: err.message };
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Reenviar código de confirmación
-  const resendConfirmationCode = async (username) => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      await cognitoAuthService.resendConfirmationCode(username);
-      
-      toast.success('Se ha enviado un nuevo código de confirmación a tu correo');
-      return { success: true };
-    } catch (err) {
-      console.error('Resend code error:', err);
-      setError(err.message);
-      toast.error(err.message || 'Error al reenviar el código');
-      return { success: false, error: err.message };
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Cerrar sesión
+  // Logout
   const logout = async () => {
     try {
-      cognitoAuthService.signOut();
+      cognitoAuth.signOut();
       setUser(null);
-      toast.success('Has cerrado sesión');
+      setIsAuthenticated(false);
+      toast.success('Sesión cerrada correctamente');
       return { success: true };
-    } catch (err) {
-      console.error('Logout error:', err);
-      setError(err.message);
-      toast.error(err.message || 'Error al cerrar sesión');
-      return { success: false, error: err.message };
+    } catch (error) {
+      console.error('Logout error:', error);
+      toast.error('Error al cerrar sesión');
+      return { success: false, error: error.message };
     }
   };
 
-  // Olvidé mi contraseña
-  const forgotPassword = async (username) => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      await cognitoAuthService.forgotPassword(username);
-      
-      toast.success('Se ha enviado un código para restablecer tu contraseña');
-      return { success: true };
-    } catch (err) {
-      console.error('Forgot password error:', err);
-      setError(err.message);
-      toast.error(err.message || 'Error al solicitar recuperación de contraseña');
-      return { success: false, error: err.message };
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Confirmar nueva contraseña
-  const confirmNewPassword = async (username, code, newPassword) => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      await cognitoAuthService.confirmForgotPassword(username, code, newPassword);
-      
-      toast.success('Contraseña actualizada exitosamente');
-      return { success: true };
-    } catch (err) {
-      console.error('Confirm new password error:', err);
-      setError(err.message);
-      toast.error(err.message || 'Error al confirmar nueva contraseña');
-      return { success: false, error: err.message };
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Cambiar contraseña (usuario autenticado)
-  const changePassword = async (oldPassword, newPassword) => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      await cognitoAuthService.changePassword(oldPassword, newPassword);
-      
-      toast.success('Contraseña cambiada exitosamente');
-      return { success: true };
-    } catch (err) {
-      console.error('Change password error:', err);
-      setError(err.message);
-      toast.error(err.message || 'Error al cambiar contraseña');
-      return { success: false, error: err.message };
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Actualizar perfil
-  const updateProfile = async (attributes) => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      await cognitoAuthService.updateUserAttributes(attributes);
-      
-      // Actualizar usuario local
-      setUser(prev => ({
-        ...prev,
-        ...attributes,
-      }));
-      
-      toast.success('Perfil actualizado exitosamente');
-      return { success: true };
-    } catch (err) {
-      console.error('Update profile error:', err);
-      setError(err.message);
-      toast.error(err.message || 'Error al actualizar el perfil');
-      return { success: false, error: err.message };
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Refrescar sesión
+  // Refresh de sesión
   const refreshSession = async () => {
     try {
-      const result = await cognitoAuthService.refreshSession();
-      return { success: true, ...result };
-    } catch (err) {
-      console.error('Session refresh error:', err);
-      // Si falla el refresh, probablemente la sesión expiró
+      await cognitoAuth.refreshTokens();
+      const userData = await cognitoAuth.getCurrentUser();
+      setUser(userData);
+      return { success: true };
+    } catch (error) {
+      console.error('Session refresh failed:', error);
       setUser(null);
-      setError('La sesión ha expirado. Por favor inicia sesión nuevamente.');
-      return { success: false, error: err.message };
+      setIsAuthenticated(false);
+      return { success: false };
     }
+  };
+
+  // Verificar rol de usuario
+  const hasRole = (role) => {
+    if (!user) return false;
+    return user.role === role || user['custom:role'] === role;
+  };
+
+  // Verificar plan del usuario
+  const hasPlan = (plan) => {
+    if (!user) return false;
+    return user.plan === plan || user['custom:plan'] === plan;
   };
 
   const value = {
     user,
     loading,
-    error,
-    isAuthenticated: !!user,
+    isAuthenticated,
     login,
-    register,
-    confirmRegistration,
-    resendConfirmationCode,
     logout,
-    forgotPassword,
-    confirmNewPassword,
-    changePassword,
-    updateProfile,
     refreshSession,
+    hasRole,
+    hasPlan,
+    checkAuthStatus
   };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+      <AuthContext.Provider value={value}>
+        {children}
+      </AuthContext.Provider>
+  );
 }
+
+// Hook personalizado
+export function useAuth() {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth debe usarse dentro de AuthProvider');
+  }
+  return context;
+}
+
+export default AuthContext;

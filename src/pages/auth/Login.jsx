@@ -1,273 +1,256 @@
-// src/pages/auth/Login.jsx
+// src/pages/auth/Login.jsx - Login seguro conectado con Cognito
 import { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
-import { useAuth } from '../../hooks/useAuth';
-import { useToast } from '../../hooks/useToast';
-import { BoltIcon } from '@heroicons/react/24/solid';
-import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
-import LoadingSpinner from '../../components/common/LoadingSpinner';
+import { useAuth } from '../../context/AuthContext';
+import { Eye, EyeOff, Zap, Shield, Lock } from 'lucide-react';
+import { motion } from 'framer-motion';
+import toast from 'react-hot-toast';
 
-// Esquema de validación con Zod
-const loginSchema = z.object({
-  email: z.string()
-    .min(1, 'El correo es requerido')
-    .email('Formato de correo inválido'),
-  password: z.string()
-    .min(1, 'La contraseña es requerida'),
-  rememberMe: z.boolean().optional()
-});
-
-/**
- * Página de inicio de sesión
- * Maneja el proceso de autenticación con Cognito
- */
-export default function Login() {
-  // Estados
+const Login = () => {
+  const [formData, setFormData] = useState({
+    username: 'demo@viralia.ai', // Pre-filled para demo
+    password: '',
+    rememberMe: false
+  });
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [loginError, setLoginError] = useState('');
-  
-  // Hooks
-  const { login } = useAuth();
-  const toast = useToast();
+
+  const { login, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  
-  // Obtener la ruta de redirección (si existe)
+
   const from = location.state?.from?.pathname || '/dashboard';
-  
-  // Configurar React Hook Form con Zod
-  const { 
-    register, 
-    handleSubmit, 
-    formState: { errors },
-    setFocus
-  } = useForm({
-    resolver: zodResolver(loginSchema),
-    defaultValues: {
-      email: '',
-      password: '',
-      rememberMe: localStorage.getItem('rememberMe') === 'true'
-    }
-  });
-  
-  // Enfocar el campo de email al cargar
+
+  // Redirigir si ya está autenticado
   useEffect(() => {
-    setFocus('email');
-  }, [setFocus]);
-  
-  // Manejar el envío del formulario
-  const onSubmit = async (data) => {
+    if (isAuthenticated) {
+      navigate(from, { replace: true });
+    }
+  }, [isAuthenticated, navigate, from]);
+
+  const handleChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value
+    }));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    if (!formData.username || !formData.password) {
+      toast.error('Por favor completa todos los campos');
+      return;
+    }
+
+    setIsLoading(true);
+
     try {
-      setIsLoading(true);
-      setLoginError('');
-      
-      const result = await login(data.email, data.password);
-      
+      const result = await login(formData.username, formData.password);
+
       if (result.success) {
-        // Si requiere cambio de contraseña
-        if (result.requireNewPassword) {
-          navigate('/change-password', { 
-            state: { 
-              username: data.email,
-              userAttributes: result.userAttributes,
-              requiredAttributes: result.requiredAttributes
-            }
-          });
-          return;
-        }
-        
-        // Guardar preferencia de "Recordarme"
-        if (data.rememberMe) {
+        // Guardar preferencia de recordar
+        if (formData.rememberMe) {
           localStorage.setItem('rememberMe', 'true');
+          localStorage.setItem('lastUsername', formData.username);
         } else {
           localStorage.removeItem('rememberMe');
+          localStorage.removeItem('lastUsername');
         }
-        
-        // Mostrar mensaje de éxito
-        toast.success('Inicio de sesión exitoso');
-        
-        // Redirigir a la página solicitada originalmente o al dashboard
+
+        // Redirigir a la página solicitada
         navigate(from, { replace: true });
-      } else {
-        throw new Error(result.error || 'Error de inicio de sesión');
       }
     } catch (error) {
       console.error('Login error:', error);
-      setLoginError(error.message || 'Error al iniciar sesión');
-      toast.error(error.message || 'Error al iniciar sesión');
     } finally {
       setIsLoading(false);
     }
   };
-  
+
+  // Demo credentials helper
+  const fillDemoCredentials = () => {
+    setFormData({
+      username: 'demo@viralia.ai',
+      password: 'TuPassword$2024',
+      rememberMe: false
+    });
+    toast.success('Credenciales demo cargadas');
+  };
+
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="flex justify-center">
-          <div className="h-12 w-12 rounded-md bg-gradient-to-r from-indigo-500 to-purple-600 flex items-center justify-center">
-            <BoltIcon className="h-8 w-8 text-white" />
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center p-4">
+        <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="w-full max-w-md"
+        >
+          {/* Header */}
+          <div className="text-center mb-8">
+            <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ delay: 0.2, type: "spring", stiffness: 260, damping: 20 }}
+                className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl mb-4"
+            >
+              <Zap className="w-8 h-8 text-white" />
+            </motion.div>
+
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">
+              Bienvenido a Viralia
+            </h1>
+            <p className="text-gray-600">
+              La plataforma de contenido viral con IA
+            </p>
           </div>
-        </div>
-        
-        <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-          Bienvenido a Viralia
-        </h2>
-        <p className="mt-2 text-center text-sm text-gray-600">
-          Inicia sesión para acceder a tu cuenta
-        </p>
-      </div>
-      
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
-          {/* Mensaje de error */}
-          {loginError && (
-            <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm rounded border border-red-200">
-              {loginError}
-            </div>
-          )}
-          
-          <form className="space-y-6" onSubmit={handleSubmit(onSubmit)}>
-            {/* Campo de correo electrónico */}
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                Correo electrónico
-              </label>
-              <div className="mt-1">
-                <input
-                  id="email"
-                  type="email"
-                  autoComplete="email"
-                  className={`appearance-none block w-full px-3 py-2 border ${
-                    errors.email ? 'border-red-300 focus:ring-red-500 focus:border-red-500' : 'border-gray-300 focus:ring-indigo-500 focus:border-indigo-500'
-                  } rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 sm:text-sm`}
-                  placeholder="tu@email.com"
-                  {...register('email')}
-                />
-                {errors.email && (
-                  <p className="mt-2 text-sm text-red-600">{errors.email.message}</p>
-                )}
-              </div>
-            </div>
-            
-            {/* Campo de contraseña */}
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                Contraseña
-              </label>
-              <div className="mt-1 relative">
-                <input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  autoComplete="current-password"
-                  className={`appearance-none block w-full px-3 py-2 border ${
-                    errors.password ? 'border-red-300 focus:ring-red-500 focus:border-red-500' : 'border-gray-300 focus:ring-indigo-500 focus:border-indigo-500'
-                  } rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 sm:text-sm`}
-                  {...register('password')}
-                />
+
+          {/* Login Form */}
+          <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.3 }}
+              className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8"
+          >
+            {/* Demo Banner */}
+            <div className="bg-gradient-to-r from-green-50 to-blue-50 border border-green-200 rounded-lg p-4 mb-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <Shield className="w-5 h-5 text-green-600 mr-2" />
+                  <span className="text-sm font-medium text-green-800">Demo Disponible</span>
+                </div>
                 <button
-                  type="button"
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center focus:outline-none"
-                  onClick={() => setShowPassword(!showPassword)}
-                  tabIndex="-1"
-                  aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                    onClick={fillDemoCredentials}
+                    className="text-xs bg-green-600 text-white px-3 py-1 rounded-full hover:bg-green-700 transition-colors"
                 >
-                  {showPassword ? (
-                    <EyeSlashIcon className="h-5 w-5 text-gray-400" />
-                  ) : (
-                    <EyeIcon className="h-5 w-5 text-gray-400" />
-                  )}
+                  Usar Demo
                 </button>
-                {errors.password && (
-                  <p className="mt-2 text-sm text-red-600">{errors.password.message}</p>
-                )}
               </div>
             </div>
-            
-            {/* Opciones adicionales */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <input
-                  id="rememberMe"
-                  type="checkbox"
-                  className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                  {...register('rememberMe')}
-                />
-                <label htmlFor="rememberMe" className="ml-2 block text-sm text-gray-900">
-                  Recordarme
+
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {/* Username/Email */}
+              <div>
+                <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-2">
+                  Email
                 </label>
+                <input
+                    id="username"
+                    name="username"
+                    type="email"
+                    autoComplete="email"
+                    required
+                    value={formData.username}
+                    onChange={handleChange}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    placeholder="tu@email.com"
+                />
               </div>
-              
-              <div className="text-sm">
-                <Link to="/forgot-password" className="font-medium text-indigo-600 hover:text-indigo-500">
+
+              {/* Password */}
+              <div>
+                <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+                  Contraseña
+                </label>
+                <div className="relative">
+                  <input
+                      id="password"
+                      name="password"
+                      type={showPassword ? 'text' : 'password'}
+                      autoComplete="current-password"
+                      required
+                      value={formData.password}
+                      onChange={handleChange}
+                      className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                      placeholder="Tu contraseña"
+                  />
+                  <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Remember Me & Forgot Password */}
+              <div className="flex items-center justify-between">
+                <label className="flex items-center">
+                  <input
+                      type="checkbox"
+                      name="rememberMe"
+                      checked={formData.rememberMe}
+                      onChange={handleChange}
+                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                  <span className="ml-2 text-sm text-gray-600">Recordarme</span>
+                </label>
+
+                <Link
+                    to="/forgot-password"
+                    className="text-sm text-blue-600 hover:text-blue-800 transition-colors"
+                >
                   ¿Olvidaste tu contraseña?
                 </Link>
               </div>
-            </div>
-            
-            {/* Botón de envío */}
-            <div>
+
+              {/* Login Button */}
               <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold py-3 px-4 rounded-lg hover:from-blue-700 hover:to-purple-700 focus:ring-4 focus:ring-blue-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
               >
                 {isLoading ? (
-                  <div className="flex items-center">
-                    <svg
-                      className="animate-spin -ml-1 mr-2 h-5 w-5 text-white"
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                    >
-                      <circle
-                        className="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                      ></circle>
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                      ></path>
-                    </svg>
-                    Iniciando sesión...
-                  </div>
+                    <>
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                      Iniciando sesión...
+                    </>
                 ) : (
-                  'Iniciar sesión'
+                    <>
+                      <Lock className="w-5 h-5 mr-2" />
+                      Iniciar Sesión
+                    </>
                 )}
               </button>
-            </div>
-          </form>
-          
-          {/* Enlace para registro */}
-          <div className="mt-6">
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-300"></div>
+            </form>
+
+            {/* Security Features */}
+            <div className="mt-6 pt-6 border-t border-gray-200">
+              <div className="flex items-center justify-center space-x-6 text-xs text-gray-500">
+                <div className="flex items-center">
+                  <Shield className="w-4 h-4 mr-1" />
+                  <span>Cognito Secure</span>
+                </div>
+                <div className="flex items-center">
+                  <Lock className="w-4 h-4 mr-1" />
+                  <span>Encriptado</span>
+                </div>
               </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white text-gray-500">¿No tienes una cuenta?</span>
-              </div>
             </div>
-            
-            <div className="mt-6">
-              <Link
-                to="/register"
-                className="w-full flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-indigo-600 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-              >
-                Registrarse
-              </Link>
+
+            {/* Footer */}
+            <div className="mt-6 text-center">
+              <p className="text-sm text-gray-600">
+                ¿No tienes cuenta?{' '}
+                <Link
+                    to="/register"
+                    className="text-blue-600 hover:text-blue-800 font-medium transition-colors"
+                >
+                  Regístrate gratis
+                </Link>
+              </p>
             </div>
+          </motion.div>
+
+          {/* Version Info */}
+          <div className="text-center mt-6 text-xs text-gray-500">
+            Viralia v1.0 • Protegido por AWS Cognito
           </div>
-        </div>
+        </motion.div>
       </div>
-    </div>
   );
-}
+};
+
+export default Login;
