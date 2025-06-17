@@ -1,84 +1,99 @@
-// src/components/auth/ProtectedRoute.jsx
+// src/components/auth/ProtectedRoute.jsx - Versión arreglada
 import { Navigate, useLocation } from 'react-router-dom';
-import PropTypes from 'prop-types';
 import { useAuth } from '../../hooks/useAuth';
-import LoadingScreen from '../common/LoadingScreen';
 import { useEffect } from 'react';
 
-/**
- * Componente mejorado para proteger rutas que requieren autenticación
- * - Validación de roles
- * - Mejor manejo de redirecciones
- * - Soporte para rutas anidadas
- * - Registro de actividad para seguridad
- */
-export default function ProtectedRoute({ 
-  children, 
-  redirectTo = '/login', 
-  roles = [],
-  requiredPlan = null
-}) {
-  const { user, loading, isAuthenticated, refreshSession } = useAuth();
+const ProtectedRoute = ({ children, requiredRole = null, requiredPlan = null }) => {
+  const { user, loading, isAuthenticated, checkAuthStatus } = useAuth();
   const location = useLocation();
 
-  // Actualizar timestamp de última actividad para sesiones
+  // Re-verificar autenticación al cambiar de ruta si no hay usuario pero hay tokens
   useEffect(() => {
-    if (isAuthenticated) {
-      sessionStorage.setItem('lastActivity', Date.now().toString());
-      
-      // Refrescar sesión si es necesario (token a punto de expirar)
-      const tokenExpiration = localStorage.getItem('tokenExpiration');
-      if (tokenExpiration) {
-        const expirationTime = parseInt(tokenExpiration, 10);
-        const currentTime = Date.now();
-        
-        // Si el token expira en menos de 5 minutos, refrescarlo
-        if (expirationTime - currentTime < 5 * 60 * 1000) {
-          refreshSession();
-        }
-      }
+    const tokens = localStorage.getItem('viralia_auth');
+    if (!user && tokens && !loading) {
+      console.log('Re-verificando autenticación al cambiar ruta...');
+      checkAuthStatus();
     }
-  }, [isAuthenticated, refreshSession, location.pathname]);
+  }, [location.pathname, user, loading, checkAuthStatus]);
 
-  // Mostrar pantalla de carga mientras se verifica la autenticación
+  // Mostrar loading mientras verifica autenticación
   if (loading) {
-    return <LoadingScreen message="Verificando acceso..." />;
+    return (
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+            <p className="mt-4 text-gray-600">Verificando acceso...</p>
+          </div>
+        </div>
+    );
   }
 
-  // Si no está autenticado, redirigir al login
+  // Redirigir al login si no está autenticado
   if (!isAuthenticated) {
-    // Guardar la ubicación actual para redirigir después del login
-    return <Navigate to={redirectTo} state={{ from: location }} replace />;
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // Si se requiere validación de roles
-  if (roles.length > 0) {
-    const userRole = user?.role || user?.['custom:role'] || 'user';
-    const hasRequiredRole = roles.includes(userRole);
-
-    if (!hasRequiredRole) {
-      // Si no tiene el rol requerido, redirigir a una página de acceso denegado
-      return <Navigate to="/access-denied" replace state={{ requiredRoles: roles }} />;
-    }
+  // Verificar rol requerido
+  if (requiredRole && user && !hasRole(user, requiredRole)) {
+    return (
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+          <div className="text-center bg-white p-8 rounded-lg shadow-lg max-w-md">
+            <div className="text-red-500 text-6xl mb-4">🚫</div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Acceso Denegado</h2>
+            <p className="text-gray-600 mb-4">
+              No tienes permisos para acceder a esta sección.
+            </p>
+            <p className="text-sm text-gray-500">
+              Rol requerido: <span className="font-medium">{requiredRole}</span>
+            </p>
+            <button
+                onClick={() => window.history.back()}
+                className="mt-4 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Volver
+            </button>
+          </div>
+        </div>
+    );
   }
 
-  // Si se requiere un plan específico
-  if (requiredPlan) {
-    const userPlan = user?.plan || user?.['custom:plan'] || 'free';
-    
-    if (userPlan !== requiredPlan) {
-      // Si no tiene el plan requerido, redirigir a una página de actualización
-      return <Navigate to="/upgrade-plan" replace state={{ requiredPlan, currentPlan: userPlan }} />;
-    }
+  // Verificar plan requerido
+  if (requiredPlan && user && !hasPlan(user, requiredPlan)) {
+    return (
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+          <div className="text-center bg-white p-8 rounded-lg shadow-lg max-w-md">
+            <div className="text-yellow-500 text-6xl mb-4">⭐</div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Plan Requerido</h2>
+            <p className="text-gray-600 mb-4">
+              Esta funcionalidad requiere una suscripción premium.
+            </p>
+            <p className="text-sm text-gray-500 mb-4">
+              Plan requerido: <span className="font-medium">{requiredPlan}</span>
+            </p>
+            <button
+                onClick={() => window.location.href = '/upgrade'}
+                className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-3 rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all"
+            >
+              Actualizar Plan
+            </button>
+          </div>
+        </div>
+    );
   }
 
-  // Si pasa todas las validaciones, renderizar los componentes hijos
+  // Si pasa todas las validaciones, renderizar el contenido
   return children;
-}
-
-ProtectedRoute.propTypes = {
-  children: PropTypes.node.isRequired,
-  redirectTo: PropTypes.string,
-  roles: PropTypes.arrayOf(PropTypes.string),
-  requiredPlan: PropTypes.string
 };
+
+// Helpers para verificar roles y planes
+const hasRole = (user, role) => {
+  if (!user) return false;
+  return user.role === role || user['custom:role'] === role;
+};
+
+const hasPlan = (user, plan) => {
+  if (!user) return false;
+  return user.plan === plan || user['custom:plan'] === plan;
+};
+
+export default ProtectedRoute;
