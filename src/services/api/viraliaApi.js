@@ -286,6 +286,97 @@ class ViraliaApiClient {
             return { ok: false, error: error.message };
         }
     }
+
+    // src/services/api/viraliaApi.js - Añadir estos métodos faltantes
+
+// 🔄 Generar por categorías - FALTABA IMPLEMENTAR
+    async generateByCategory({ tema, red, user_id = 'user' }) {
+        try {
+            const response = await this.client.post('/by_category', {
+                tema,
+                red,
+                user_id
+            });
+
+            return response.data;
+        } catch (error) {
+            throw new Error('Error generando por categorías');
+        }
+    }
+
+// ♻️ Reciclar contenido evergreen - YA EXISTE PERO VERIFICAR
+    async recycleContent({ old_post, red, user_id = 'user' }) {
+        try {
+            const response = await this.client.post('/recycle_evergreen', {
+                old_post,
+                red,
+                user_id
+            });
+
+            return response.data;
+        } catch (error) {
+            throw new Error('Error reciclando contenido');
+        }
+    }
+
+// 📊 Análisis de sentimiento - FALTABA
+    async analyzeSentiment({ text, user_id = 'user' }) {
+        try {
+            const response = await this.client.post('/analyze_sentiment', {
+                text,
+                user_id
+            });
+
+            return response.data;
+        } catch (error) {
+            throw new Error('Error analizando sentimiento');
+        }
+    }
+
+// 🔍 Verificar directrices - FALTABA
+    async checkGuidelines({ text, red, user_id = 'user' }) {
+        try {
+            const response = await this.client.post('/guideline_checker', {
+                text,
+                red,
+                user_id
+            });
+
+            return response.data;
+        } catch (error) {
+            throw new Error('Error verificando directrices');
+        }
+    }
+
+// ⏰ Optimizar horario - FALTABA
+    async optimizeSchedule({ tema, red, user_id = 'user' }) {
+        try {
+            const response = await this.client.post('/optimize_schedule', {
+                tema,
+                red,
+                user_id
+            });
+
+            return response.data;
+        } catch (error) {
+            throw new Error('Error optimizando horario');
+        }
+    }
+
+// 📈 Insights de rendimiento - FALTABA
+    async getPerformanceInsights({ metrics_json, red, user_id = 'user' }) {
+        try {
+            const response = await this.client.post('/performance_insights', {
+                metrics_json,
+                red,
+                user_id
+            });
+
+            return response.data;
+        } catch (error) {
+            throw new Error('Error obteniendo insights');
+        }
+    }
 }
 
 // Instancia singleton
